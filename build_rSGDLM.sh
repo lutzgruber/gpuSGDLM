@@ -1,12 +1,7 @@
 #!/bin/bash
 
-rm -R build
-mkdir build
-
-cp rSGDLM build -R
-
-cd build/rSGDLM
+cd rSGDLM
 
 autoconf
 
-R CMD build . 
+rm -R *.cache
