@@ -1,0 +1,12 @@
+Package: rSGDLM
+Type: Package
+Title: Simultaneous Graphical Dynamic Linear Models
+Version: 0.9
+Date: 2019-04-01
+Author: Lutz Gruber
+Maintainer: Lutz Gruber <no@email>
+Description: GPU-accelerated implementation of the Simultaneous graphical DLM with forward filtering, Variational Bayes posterior decoupling, and step-ahead forecasting
+License: MIT
+Depends: Rcpp (>= 0.11)
+Imports: Rcpp
+LinkingTo: Rcpp

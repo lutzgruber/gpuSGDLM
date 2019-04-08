@@ -1,0 +1,27 @@
+DEFINES = -DUSE_RCPP -DMAX_NO_GPUS=32 -DDOUBLETYPE=double -DLOGGER_LOG_LEVEL_ACTIVE=100 -DTHREADS_PER_BLOCK=512 -DOPTIM_PRECISION=0.000001 -DOPTIM_MAX_ITER=50 -DGAMMA_LOOPS=2
+
+# C++ compiler flags 
+PKG_CPPFLAGS= $(DEFINES) -I.
+
+# NVCC compiler flags
+NVCC = nvcc
+NVCC_INC = -I@CUDA_INC_PATH@
+NVCC_FLAGS = -Xcompiler -fPIC -c $(PKG_CPPFLAGS) $(NVCC_INC) -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
+
+# Linker flags to external shared objects libraries
+PKG_LIBS = -L@CUDA_LIB_PATH@ -lcudart -lcublas -lcurand
+
+### Define objects
+cu_sources := $(wildcard *.cu SGDLM/*.cu)
+cu_sharedlibs := $(patsubst %.cu, %.o, $(cu_sources))
+
+cpp_sources := $(wildcard *.cpp SGDLM/*.cpp)
+cpp_sharedlibs := $(patsubst %.cpp, %.o, $(cpp_sources))
+
+OBJECTS = $(cpp_sharedlibs) $(cu_sharedlibs)
+
+%.o: %.cpp $(cpp_sources)
+	$(CXX) -fPIC -c $(ALL_CPPFLAGS) $(ALL_CXXFLAGS) $< -o $@
+
+%.o: %.cu $(cu_sources)
+	$(NVCC) $(NVCC_FLAGS) $< -o $@
