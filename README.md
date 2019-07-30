@@ -119,3 +119,4 @@ lines(mean_forecasts[,3], col = 'red')
 plot(y[,4], type = 'l')
 lines(mean_forecasts[,4], col = 'red')
 ```
+![Forecast and observed data](README-plot1.jpg)
