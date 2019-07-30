@@ -12,7 +12,7 @@ If the `CUDA_HOME` environment variable is set to point to the local CUDA instal
 devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM") 
 ```
 
-Custom CUDA library and header paths can be supplied to the installation routing via the `configure.args` argument,
+Custom CUDA library and header paths can be supplied to the installation routine via the `configure.args` argument,
 
 ```r
 devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM", configure.args = list(rSGDLM = c("--with-cuda-lib=CUDA_LIB_DIR", "--with-cuda-include=CUDA_INC_DIR"))) 
