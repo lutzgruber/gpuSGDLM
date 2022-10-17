@@ -4,7 +4,7 @@
 
 ## Installation
 
-Installation of the **rSGDLM** R package has been tested on a Linux computer equipped with a Quadro P2000 GPU and the CUDA toolkit 10.1 installed (download from https://developer.nvidia.com/cuda-toolkit-archive). The package can run on much older hardware and software, given that the `-gencode arch` flags in `rSGDLM/src/Makevars.in` are modified to reflect the older setup; the minimum required compute capability is 2.0 and the minimum required CUDA toolkit is 5.5. Furthermore, Rcpp and C++ compilers are required.
+Installation of the **rSGDLM** R package has been tested on a Linux computer equipped with a Quadro P2000 GPU and the CUDA toolkit 11.8 installed (download from https://developer.nvidia.com/cuda-toolkit-archive). The package can run on much older hardware and software, provided that the `-gencode arch` flags in `rSGDLM/src/Makevars.in` are modified to reflect the older setup; the minimum required compute capability is 2.0 and the minimum required CUDA toolkit is 5.5. Furthermore, Rcpp and C++ compilers are required.
 
 If the `CUDA_HOME` environment variable is set to point to the local CUDA installation, and `$CUDA_HOME/lib64` and `$CUDA_HOME/include` are the directories containing the CUDA library and header files, respectively, **rSGDLM** can be installed from within R by calling
 
