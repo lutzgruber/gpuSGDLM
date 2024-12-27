@@ -6,7 +6,7 @@ PKG_CPPFLAGS= $(DEFINES) -I.
 # NVCC compiler flags
 NVCC = nvcc
 NVCC_INC = -I@CUDA_INC_PATH@
-NVCC_FLAGS = -Xcompiler -fPIC -c $(PKG_CPPFLAGS) $(NVCC_INC) -allow-unsupported-compiler
+NVCC_FLAGS = -Xcompiler -fPIC -c $(PKG_CPPFLAGS) $(NVCC_INC) @NVCC_GENCODE_FLAGS@ @NVCC_CUSTOM_FLAGS@
 
 # Linker flags to external shared objects libraries
 PKG_LIBS = -L@CUDA_LIB_PATH@ -lcudart -lcublas -lcurand

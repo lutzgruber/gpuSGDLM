@@ -4,7 +4,7 @@
 
 ## Installation
 
-Installation of the **rSGDLM** R package has been tested on a Linux computer equipped with a Quadro P2000 GPU and the CUDA toolkit 11.8 installed (download from https://developer.nvidia.com/cuda-toolkit-archive). The package can run on much older hardware and software, provided that the `-gencode arch` flags in `rSGDLM/src/Makevars.in` are modified to reflect the older setup; the minimum required compute capability is 2.0 and the minimum required CUDA toolkit is 5.5. Furthermore, Rcpp and C++ compilers are required.
+Installation of the **rSGDLM** R package has been tested on a Linux computer equipped with a Quadro P2000 GPU and the CUDA toolkit 11.8 installed (download from https://developer.nvidia.com/cuda-toolkit-archive). The package can run on much older hardware and software, provided that the appropriate `gencode` flag is set via `configure.args`. The minimum required compute capability is 2.0 and the minimum required CUDA toolkit is 5.5; you can find out the compute capability of your GPU at https://developer.nvidia.com/cuda-gpus. Furthermore, Rcpp and C++ compilers are required.
 
 If the `CUDA_HOME` environment variable is set to point to the local CUDA installation, and `$CUDA_HOME/lib64` and `$CUDA_HOME/include` are the directories containing the CUDA library and header files, respectively, **rSGDLM** can be installed from within R by calling
 
@@ -12,10 +12,22 @@ If the `CUDA_HOME` environment variable is set to point to the local CUDA instal
 devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM") 
 ```
 
-Custom CUDA library and header paths can be supplied to the installation routine via the `configure.args` argument,
+Custom CUDA library and header paths can be supplied to the installation routine via the `configure.args` installation argument,
 
 ```r
 devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM", configure.args = list(rSGDLM = c("--with-cuda-lib=CUDA_LIB_DIR", "--with-cuda-include=CUDA_INC_DIR"))) 
+```
+
+To specify a specific build architecture such as `arch=compute_35,code=sm_35`, use
+
+```r
+devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM", configure.args = list(rSGDLM = "--with-nvcc-gencode='arch=compute_35,code=sm_35'")) 
+```
+
+To have nvcc use a specific C++ compiler such as `g++-13`, use
+
+```r
+devtools::install_github("lutzgruber/gpuSGDLM/rSGDLM", configure.args = list(rSGDLM = "--with-nvcc-flags='-ccbin g++-13'")) 
 ```
 
 ## Sample code
