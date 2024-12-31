@@ -54,9 +54,10 @@ template<typename DOUBLE, class memory_manager> struct simPointers {
 	// VB posterior simulation AND forecasting
 	DOUBLE* data_lambdas;
 	DOUBLE** lambdas;
-	DOUBLE* data_randoms;
-	DOUBLE* data_randoms_pt2;
-	DOUBLE** randoms_nrepeat_ptr;
+	DOUBLE* cache_gamma_uniforms;
+	DOUBLE* cache_gamma_normals;
+	DOUBLE* cache_MVN_normals;
+	DOUBLE** cache_MVN_normals_nrepeat_ptr;
 	DOUBLE* data_Gammas;
 	DOUBLE** Gammas;
 	int* LU_pivots;
@@ -93,6 +94,13 @@ template<typename DOUBLE, class memory_manager> struct simPointers {
 	DOUBLE** nus;
 	DOUBLE* data_Gammas_inv;
 	DOUBLE** Gammas_inv;
+	// copy s_t, n_t, m_t, C_t to enable multi step prior evolutions without disturbing the sequential learning routine
+	DOUBLE* forecasting_s_t;
+	DOUBLE* forecasting_n_t;
+	DOUBLE* forecasting_data_m_t;
+	DOUBLE** forecasting_m_t;
+	DOUBLE* forecasting_data_C_t;
+	DOUBLE** forecasting_C_t;
 
 	// number of simulations
 	size_t nsim;

@@ -172,6 +172,14 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initMemory(std::s
 		MEM.cpyToDeviceAsPtrArray<DOUBLE>((const DOUBLE*) P.data_C_t, this->m, this->max_p * this->max_p, P.C_t); // generate CPU+GPU pointer to individual matrices
 		P.n_t = MEM.device_alloc_vec<DOUBLE>(this->m);
 		P.s_t = MEM.device_alloc_vec<DOUBLE>(this->m);
+
+		// allocate device memory for forecasting prior copies of DLM parameters
+		P.forecasting_data_m_t = MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p);
+		MEM.cpyToDeviceAsPtrArray<DOUBLE>((const DOUBLE*) P.forecasting_data_m_t, this->m, this->max_p, P.forecasting_m_t); // generate CPU+GPU pointer to individual matrices
+		P.forecasting_data_C_t = MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p * this->max_p);
+		MEM.cpyToDeviceAsPtrArray<DOUBLE>((const DOUBLE*) P.forecasting_data_C_t, this->m, this->max_p * this->max_p, P.forecasting_C_t); // generate CPU+GPU pointer to individual matrices
+		P.forecasting_n_t = MEM.device_alloc_vec<DOUBLE>(this->m);
+		P.forecasting_s_t = MEM.device_alloc_vec<DOUBLE>(this->m);
 	}
 
 	this->manageEvoMemory(this->use_state_evolution_matrix);
@@ -261,6 +269,8 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 	SYSDEBUG_LOGGER << "HostWrapperImpl::initSimMemory(" << nsim << ", " << nsim_batch << ")" << ENDL;
 	myAssert(this->checkInitialized());
 
+	size_t gamma_loops = GAMMA_LOOPS;
+
 	// set new dimensions
 	nsim /= this->no_gpus;
 	this->nsim = nsim * this->no_gpus;
@@ -280,7 +290,6 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		// FOR VB POSTERIOR ESTIMATION AND FORECASTING
 		/*
 		 * lambdas is organized by batch     : n-array of pointers to m-arrays
-		 * randoms is organized by batch     : n-array of pointers to (m * max_p)-arrays
 		 * thetas is organized by batch      : n-array of pointers to (m * max_p)-arrays
 		 * Gammas is organized by batch      : Gammas_batch_size-array of pointers to (m * m)-arrays
 		 * chol_C_t is organized by dimension: m-array of (max_p * max_p)-arrays
@@ -288,15 +297,16 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		 * LU_pivots is organized by batch   : Gammas_batch_size-array of m-arrays
 		 *
 		 *
-		 * chol_C_t_nrepeat_ptr = n x [chol(C_t[0]), chol(C_t[1]), ..., chol(C_t[m-1])]
-		 * randoms_nrepeat_ptr  = same logic as thetas_nrepeat_ptr---just pointing to randoms instead
-		 * thetas_nrepeat_ptr   = thetas[0], thetas[max_p], thetas[2*max_p], ..., thetas[(m-1)*max_p], ..., thetas[n*(m-1)*max_p]
+		 * chol_C_t_nrepeat_ptr    = n x [chol(C_t[0]), chol(C_t[1]), ..., chol(C_t[m-1])]
+		 * MVN_normals_nrepeat_ptr = same logic as thetas_nrepeat_ptr---just pointing to cache_MVN_normals instead
+		 * thetas_nrepeat_ptr      = thetas[0], thetas[max_p], thetas[2*max_p], ..., thetas[(m-1)*max_p], ..., thetas[n*(m-1)*max_p]
 		 */
 
 		// allocate device memory
+		P.cache_gamma_uniforms = MEM_sim.device_alloc_vec<DOUBLE>(gamma_loops * this->m * P.nsim);
+		P.cache_gamma_normals = MEM_sim.device_alloc_vec<DOUBLE>(gamma_loops * this->m * P.nsim);
+		P.cache_MVN_normals = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->m * P.nsim);
 		P.data_lambdas = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
-		P.data_randoms = MEM_sim.device_alloc_vec<DOUBLE>(((this->max_p > 4) ? this->max_p : 4) * this->m * P.nsim); // allocate max(4, least max_p)*m*P.nsim so that memory P.data_random_pt2 still has 2*m*P.nsim entries allocated
-		P.data_randoms_pt2 = (DOUBLE*) ((char*) P.data_randoms + (2 * this->m * P.nsim) * sizeof(DOUBLE)); //&data_randoms[2 * m * nsim]; //TODO: verify
 		P.data_thetas = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->m * P.nsim);
 		P.data_Gammas = MEM_sim.device_alloc_vec<DOUBLE>(this->m * this->m * 2 * nsim_batch); // allocate for 2 * nsim_batch: VB_posterior can use double the batch size and forecasting will use the 2nd half for the inverse
 		P.data_chol_C_t = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->max_p * this->m);
@@ -305,7 +315,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 
 		// define array pointers
 		P.lambdas = NULL;
-		P.randoms_nrepeat_ptr = NULL;
+		P.cache_MVN_normals_nrepeat_ptr = NULL;
 		P.Gammas = NULL;
 		P.thetas = NULL;
 		P.thetas_nrepeat_ptr = NULL;
@@ -320,7 +330,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		MEM_sim.cpyToDeviceAsPtrArray<DOUBLE>(P.data_thetas, P.nsim, this->m * this->max_p, P.thetas);
 
 		// assign nrepeat pointers
-		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.data_randoms, P.nsim, this->m, this->max_p, P.randoms_nrepeat_ptr);
+		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.cache_MVN_normals, P.nsim, this->m, this->max_p, P.cache_MVN_normals_nrepeat_ptr);
 		MEM_sim.cpyToDeviceAsPtrArrayRepeatByBatch<DOUBLE>(P.data_chol_C_t, this->m, this->max_p * this->max_p, P.nsim,
 				P.chol_C_t_nrepeat_ptr);
 		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.data_thetas, P.nsim, this->m, this->max_p, P.thetas_nrepeat_ptr);
@@ -420,6 +430,36 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::clearSimMemory() 
 
 	if (this->evo_memory_initialized) { // re-allocate C_t_buffer
 		this->allocate_C_t_memory();
+	}
+}
+
+template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initForecastPriors() {
+	SYSDEBUG_LOGGER << "HostWrapperImpl::initForecastPriors()" << ENDL;
+	myAssert(this->checkInitialized());
+	
+	// copy values of m_t, C_t, n_t, s_t into the forecasting_XXX variables
+	for (size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
+		startCuda(gpu_index);
+
+		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
+
+		copy<<<(this->m + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, THREADS_PER_BLOCK, 0, P.stream>>>(this->m, (const DOUBLE*) P.n_t, P.forecasting_n_t);
+		cudaErrchk(cudaGetLastError());
+
+		copy<<<(this->m + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, THREADS_PER_BLOCK, 0, P.stream>>>(this->m, (const DOUBLE*) P.s_t, P.forecasting_s_t);
+		cudaErrchk(cudaGetLastError());
+
+		copy<<<((this->m * this->max_p) + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, THREADS_PER_BLOCK, 0, P.stream>>>(this->m * this->max_p, (const DOUBLE*) P.data_m_t, P.forecasting_data_m_t);
+		cudaErrchk(cudaGetLastError());
+
+		copy<<<((this->m * this->max_p * this->max_p) + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, THREADS_PER_BLOCK, 0, P.stream>>>((this->m * this->max_p * this->max_p), (const DOUBLE*) P.data_C_t, P.forecasting_data_C_t);
+		cudaErrchk(cudaGetLastError());
+	}
+
+	// wait until computations and memory transfers are complete
+	for (size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
+		startCuda(gpu_index);
+		cudaErrchk(cudaStreamSynchronize(this->simP[gpu_index].stream));
 	}
 }
 
@@ -601,18 +641,25 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::setParentalSets(c
 	}
 }
 
-template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior() {
+template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(bool evolve_forecast_variables) {
 	SYSDEBUG_LOGGER << "HostWrapperImpl::computePrior()" << ENDL;
 	myAssert(this->checkInitialized());
-	myAssert(this->checkPrior(false));
+	if (!evolve_forecast_variables) {
+		myAssert(this->checkPrior(false));
+	}
 
 	// call SGDLM::compute_one_step_ahead_prior with G_t = NULL
 	for (std::size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
 		startCuda(gpu_index);
 		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
 
-		SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-				(const DOUBLE**) P.delta, P.stream);
+		if (evolve_forecast_variables) {
+			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t, P.forecasting_n_t, P.forecasting_s_t, P.beta,
+					(const DOUBLE**) P.delta, P.stream);
+		} else {
+			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
+					(const DOUBLE**) P.delta, P.stream);
+		}
 	}
 
 	// wait for results
@@ -624,11 +671,13 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior() {
 	this->isPrior(true);
 }
 
-template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(const DOUBLE* host_data_G_t) {
+template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(const DOUBLE* host_data_G_t, bool evolve_forecast_variables) {
 	SYSDEBUG_LOGGER << "HostWrapperImpl::computePrior(...)" << ENDL;
 	myAssert(this->checkInitialized());
-	myAssert(this->checkPrior(false));
 	myAssert(this->checkUseStateEvolutionMatrix());
+	if (!evolve_forecast_variables) {
+		myAssert(this->checkPrior(false));
+	}
 
 	this->setEvolutionMatrix(host_data_G_t);
 
@@ -637,9 +686,15 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(cons
 		startCuda(gpu_index);
 		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
 
-		SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-				(const DOUBLE**) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
-				P.m_t_buffer);
+		if (evolve_forecast_variables) {
+			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t, P.forecasting_n_t, P.forecasting_s_t, P.beta,
+					(const DOUBLE**) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
+					P.m_t_buffer);
+		} else {
+			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
+					(const DOUBLE**) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
+					P.m_t_buffer);
+		}
 	}
 
 	// wait for results
@@ -652,7 +707,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(cons
 }
 
 template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(DOUBLE* host_data_ytp1,
-		const DOUBLE* host_data_x_tp1) {
+		const DOUBLE* host_data_x_tp1, bool create_new_random_numbers) {
 	SYSDEBUG_LOGGER << "HostWrapperImpl::computeForecast()" << ENDL;
 	myAssert(this->checkInitialized());
 	myAssert(this->checkSimInitialized());
@@ -674,11 +729,11 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(D
 		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
 
 		SGDLM<DOUBLE>::forecast((const DOUBLE*) P.zero, (const DOUBLE*) P.plus_one, this->m, this->max_p,
-				(const unsigned int*) P.p, (const unsigned int*) P.sp_indices, (const DOUBLE**) P.m_t,
-				(const DOUBLE**) P.C_t, (const DOUBLE*) P.n_t, (const DOUBLE*) P.s_t, P.nsim, this->nsim_batch,
-				(const DOUBLE**) P.x_t, P.y, P.data_nus, P.nus, P.lambdas, P.data_randoms, P.data_randoms_pt2,
-				P.randoms_nrepeat_ptr, P.Gammas, P.Gammas_inv, P.LU_pivots, P.LU_infos, P.chol_C_t,
-				P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, P.stream, P.CUBLAS, P.CURAND);
+				(const unsigned int*) P.p, (const unsigned int*) P.sp_indices, (const DOUBLE**) P.forecasting_m_t,
+				(const DOUBLE**) P.forecasting_C_t, (const DOUBLE*) P.forecasting_n_t, (const DOUBLE*) P.forecasting_s_t, P.nsim, this->nsim_batch,
+				(const DOUBLE**) P.x_t, P.y, P.data_nus, P.nus, P.lambdas, P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
+				P.cache_MVN_normals_nrepeat_ptr, P.Gammas, P.Gammas_inv, P.LU_pivots, P.LU_infos, P.chol_C_t,
+				P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, create_new_random_numbers, P.stream, P.CUBLAS, P.CURAND);
 	}
 
 	// copy results on host memory
@@ -752,8 +807,8 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computeVBPosterio
 
 		SGDLM<DOUBLE>::VB_posterior((const DOUBLE*) P.zero, (const DOUBLE*) P.plus_one, this->m, this->max_p,
 				(const unsigned int*) P.p, (const unsigned int*) P.sp_indices, (const DOUBLE**) P.m_t,
-				(const DOUBLE**) P.C_t, (const DOUBLE*) P.n_t, (const DOUBLE*) P.s_t, P.nsim, P.lambdas, P.data_randoms,
-				P.data_randoms_pt2, P.randoms_nrepeat_ptr, P.Gammas, batch_multiplier * this->nsim_batch, P.IS_weights,
+				(const DOUBLE**) P.C_t, (const DOUBLE*) P.n_t, (const DOUBLE*) P.s_t, P.nsim, P.lambdas, P.cache_gamma_uniforms,
+				P.cache_gamma_normals, P.cache_MVN_normals, P.cache_MVN_normals_nrepeat_ptr, P.Gammas, batch_multiplier * this->nsim_batch, P.IS_weights,
 				P.sum_det_weights, P.chol_C_t, P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, P.LU_pivots,
 				P.LU_infos, P.mean_lambdas, P.mean_log_lambdas, P.mean_m_t, P.mean_C_t, P.C_t_buffer, P.INV_pivots,
 				P.INV_infos, P.mean_n_t, P.mean_s_t, P.mean_Q_t, P.lambdas, P.lambdas_nrepeat_ptr, P.stream, P.CUBLAS,

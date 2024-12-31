@@ -29,6 +29,7 @@ RCPP_MODULE(gpuSGDLM) {
 	.method("computePrior", &wrapper_type::computePrior)
 	.method("computeEvoPrior", &wrapper_type::computeEvoPrior)
 	.method("computeForecast", &wrapper_type::computeForecast)
+	.method("computeEvoForecast", &wrapper_type::computeEvoForecast)
 	.method("getLogLevel", &wrapper_type::getLogLevel)
 	.method("setLogLevel", &wrapper_type::setLogLevel)
 	.method("clearGPUMemory", &wrapper_type::clearGPUAllMemory)

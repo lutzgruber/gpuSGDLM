@@ -100,13 +100,15 @@ template<typename DOUBLE> inline void sampleGamma(curandGenerator_t gen, memory_
  * memory_uniforms and memory_normals must be of size n * GAMMA_LOOPS * m
  */
 template<typename DOUBLE> inline void sampleGamma2(curandGenerator_t gen, size_t m, size_t n, const DOUBLE* n_t,
-		const DOUBLE* s_t, DOUBLE* memory_uniforms, DOUBLE* memory_normals, DOUBLE** gammas, cudaStream_t stream = 0) {
+		const DOUBLE* s_t, DOUBLE* memory_uniforms, DOUBLE* memory_normals, DOUBLE** gammas, bool create_new_random_numbers, cudaStream_t stream = 0) {
 	size_t n_loops = GAMMA_LOOPS;
 
 	size_t n_input_random_numbers = n * n_loops * m;
 
-	curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
-	curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
+	if (create_new_random_numbers) {
+		curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
+		curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
+	}
 
 	dim3 threadsPerBlock(THREADS_PER_BLOCK, 1);
 	dim3 numBlocks((n + THREADS_PER_BLOCK - 1) / threadsPerBlock.x, m);

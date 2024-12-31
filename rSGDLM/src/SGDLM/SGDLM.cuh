@@ -32,8 +32,8 @@ public:
 
 	static void VB_posterior(const DOUBLE* zero, const DOUBLE* plus_one, size_t m, size_t max_p, const unsigned int* p,
 			const unsigned int* sp_indices, const DOUBLE** m_t, const DOUBLE** C_t, const DOUBLE* n_t,
-			const DOUBLE* s_t, size_t n, DOUBLE** lambdas, DOUBLE* randoms, DOUBLE* randoms_pt2,
-			DOUBLE** randoms_nrepeat_ptr, DOUBLE** Gammas, size_t Gammas_batch_size, DOUBLE* IS_weights,
+			const DOUBLE* s_t, size_t n, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals,
+			DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** Gammas, size_t Gammas_batch_size, DOUBLE* IS_weights,
 			DOUBLE* sum_unnormalized_IS_weights, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas,
 			DOUBLE** thetas_nrepeat_ptr, int* LU_pivots, int* LU_infos, DOUBLE* mean_lambdas, DOUBLE* mean_log_lambdas,
 			DOUBLE** mean_m_t, DOUBLE** mean_C_t, DOUBLE** C_t_buffer, int* INV_pivots, int* INV_infos,
@@ -45,16 +45,16 @@ public:
 	static void forecast(const DOUBLE* zero, const DOUBLE* plus_one, size_t m, size_t max_p, const unsigned int* p,
 			const unsigned int* sp_indices, const DOUBLE** m_t, const DOUBLE** C_t, const DOUBLE* n_t,
 			const DOUBLE* s_t, size_t n, size_t Gammas_batch_size, const DOUBLE** const x_tp1,
-			DOUBLE** y_tp1_nrepeat_ptr, DOUBLE* data_nus, DOUBLE** nus_nrepeat_ptr, DOUBLE** lambdas, DOUBLE* randoms,
-			DOUBLE* randoms_pt2, DOUBLE** randoms_nrepeat_ptr, DOUBLE** Gammas, DOUBLE** Gammas_inv, int* INV_pivots,
+			DOUBLE** y_tp1_nrepeat_ptr, DOUBLE* data_nus, DOUBLE** nus_nrepeat_ptr, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals,
+			DOUBLE* cache_MVN_normals, DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** Gammas, DOUBLE** Gammas_inv, int* INV_pivots,
 			int* INV_infos, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas,
-			DOUBLE** thetas_nrepeat_ptr, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND); // simulate the t+1 observations from the prior distribution
+			DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND); // simulate the t+1 observations from the prior distribution
 
 private:
 	static void sample_parameters(const DOUBLE* zero, const DOUBLE* plus_one, size_t m, size_t max_p,
 			const unsigned int* p, const DOUBLE** m_t, const DOUBLE** C_t, const DOUBLE* n_t, const DOUBLE* s_t,
-			size_t n, DOUBLE** lambdas, DOUBLE* randoms, DOUBLE* randoms_pt2, DOUBLE** randoms_nrepeat_ptr,
-			DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr,
+			size_t n, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals, DOUBLE** cache_MVN_normals_nrepeat_ptr,
+			DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers,
 			cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND);
 };
 

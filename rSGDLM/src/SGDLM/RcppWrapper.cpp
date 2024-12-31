@@ -313,11 +313,11 @@ template<typename DOUBLE> Rcpp::List SGDLM::RcppWrapper<DOUBLE>::computeVBPoster
 template<typename DOUBLE> void SGDLM::RcppWrapper<DOUBLE>::computePrior() {
 	DEBUG_LOGGER << "RcppWrapper::computePrior()" << ENDL;
 
-	wrapper->computePrior();
+	wrapper->computePrior(false);
 }
 
 template<typename DOUBLE> void SGDLM::RcppWrapper<DOUBLE>::computeEvoPrior(const Rcpp::NumericVector& G_tp1) {
-	DEBUG_LOGGER << "RcppWrapper::computePrior(evo)" << ENDL;
+	DEBUG_LOGGER << "RcppWrapper::computeEvoPrior()" << ENDL;
 
 	Rcpp::Dimension dim_arg_1 = G_tp1.attr("dim");
 
@@ -343,7 +343,7 @@ template<typename DOUBLE> void SGDLM::RcppWrapper<DOUBLE>::computeEvoPrior(const
 
 	wrapper->manageEvoMemory(true);
 
-	wrapper->computePrior(data_G_tp1);
+	wrapper->computePrior(data_G_tp1, false);
 }
 
 template<typename DOUBLE> Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::computeForecast(std::size_t nsim,
@@ -352,7 +352,7 @@ template<typename DOUBLE> Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::comput
 
 	Rcpp::Dimension dim_arg_3 = F_tp1.attr("dim");
 
-	if (dim_arg_3.size() != 2) {
+	if (dim_arg_3.size() != 2 && dim_arg_3.size() != 3) {
 		ERROR_LOGGER << "Incorrect dimension of the input arguments" << ENDL;
 		return Rcpp::NumericVector();
 	}
@@ -360,6 +360,12 @@ template<typename DOUBLE> Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::comput
 	std::size_t m_arg_3 = dim_arg_3[1];
 
 	std::size_t max_p_arg_3 = dim_arg_3[0];
+
+	std::size_t nsteps_arg_3 = 1;
+
+	if (dim_arg_3.size() == 3) {
+		nsteps_arg_3 = dim_arg_3[2];
+	}
 
 	if (m_arg_3 != wrapper->getNoSeries() || max_p_arg_3 != wrapper->getMaxP()) {
 		ERROR_LOGGER << "Dimensions of input arguments are incompatible" << ENDL;
@@ -372,15 +378,114 @@ template<typename DOUBLE> Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::comput
 
 	memory_manager_RCPP host_MEM_temp;
 
-	DOUBLE* data_y_tp1 = host_MEM_temp.host_alloc_vec<DOUBLE>(wrapper->getNSim() * wrapper->getNoSeries());
+	std::size_t dim_y_tp1[] = { wrapper->getNoSeries(), wrapper->getNSim(), nsteps_arg_3 };
+
+	DOUBLE* data_y_tp1 = host_MEM_temp.host_alloc_vec<DOUBLE>(wrapper->getNSim() * wrapper->getNoSeries() * nsteps_arg_3);
 	DOUBLE* data_F_tp1 = host_MEM_temp.getData<DOUBLE, Rcpp::NumericVector>(F_tp1);
 
-	wrapper->computeForecast(data_y_tp1, data_F_tp1);
+	wrapper->initForecastPriors();
 
-	std::size_t dim_y_tp1[] = { wrapper->getNoSeries(), wrapper->getNSim() };
+	for (std::size_t k = 0; k < nsteps_arg_3; k++) {
+		if (k > 0) {
+			wrapper->computePrior(true);
+		}
 
-	Rcpp::NumericVector y_tp1 = memory_manager_RCPP::getRcppVector<DOUBLE, Rcpp::NumericVector>(data_y_tp1, 2,
-			dim_y_tp1);
+		DOUBLE* data_y_tp1_pointer_pos = (DOUBLE*) ((char*) data_y_tp1 + k * wrapper->getNoSeries() * wrapper->getNSim() * sizeof(DOUBLE));
+		DOUBLE* data_F_tp1_pointer_pos = (DOUBLE*) ((char*) data_F_tp1 + k * wrapper->getNoSeries() * wrapper->getMaxP() * sizeof(DOUBLE));
+		wrapper->computeForecast(data_y_tp1_pointer_pos, data_F_tp1_pointer_pos, true);
+	}
+
+	Rcpp::NumericVector y_tp1 = memory_manager_RCPP::getRcppVector<DOUBLE, Rcpp::NumericVector>(data_y_tp1, dim_arg_3.size(), dim_y_tp1);
+
+	return y_tp1;
+}
+
+template<typename DOUBLE> Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::computeEvoForecast(std::size_t nsim,
+		std::size_t nsim_batch, const Rcpp::NumericVector& F_tp1, const Rcpp::NumericVector& G_tp1) {
+	DEBUG_LOGGER << "RcppWrapper::computeEvoForecast()" << ENDL;
+
+	Rcpp::Dimension dim_arg_3 = F_tp1.attr("dim");
+
+	if (dim_arg_3.size() != 2 && dim_arg_3.size() != 3) {
+		ERROR_LOGGER << "Incorrect dimension of the input arguments" << ENDL;
+		return Rcpp::NumericVector();
+	}
+
+	std::size_t m_arg_3 = dim_arg_3[1];
+
+	std::size_t max_p_arg_3 = dim_arg_3[0];
+
+	std::size_t nsteps_arg_3 = 1;
+
+	if (dim_arg_3.size() == 3) {
+		nsteps_arg_3 = dim_arg_3[2];
+	}
+
+	if (m_arg_3 != wrapper->getNoSeries() || max_p_arg_3 != wrapper->getMaxP()) {
+		ERROR_LOGGER << "Dimensions of input arguments are incompatible" << ENDL;
+		return Rcpp::NumericVector();
+	}
+
+	if (nsim != wrapper->getNSim() || nsim_batch != wrapper->getNSimBatch()) { // initialize simulation memory
+		wrapper->initSimMemory(nsim, nsim_batch);
+	}
+
+
+	Rcpp::Dimension dim_G_tp1 = G_tp1.attr("dim");
+
+	if (dim_G_tp1.size() != 3 && dim_G_tp1.size() != 4) {
+		ERROR_LOGGER << "Incorrect dimension of the input arguments" << ENDL;
+		return Rcpp::NumericVector();;
+	}
+
+	std::size_t m_arg_1 = dim_G_tp1[2];
+
+	std::size_t max_p_arg_1_1 = dim_G_tp1[0];
+	std::size_t max_p_arg_1_2 = dim_G_tp1[1];
+
+	std::size_t nsteps_arg_1 = 1;
+	if (dim_G_tp1.size() == 4) {
+		nsteps_arg_1 = dim_G_tp1[3];
+
+		if (nsteps_arg_1 > 1) {
+			if (nsteps_arg_1 != nsteps_arg_3) {
+				ERROR_LOGGER << "Dimensions of input arguments are incompatible" << ENDL;
+				return Rcpp::NumericVector();;
+			}
+		}
+	}
+
+	if (m_arg_1 != wrapper->getNoSeries() || max_p_arg_1_1 != wrapper->getMaxP()
+			|| max_p_arg_1_2 != wrapper->getMaxP()) {
+		ERROR_LOGGER << "Dimensions of input arguments are incompatible" << ENDL;
+		return Rcpp::NumericVector();;
+	}
+
+	memory_manager_RCPP host_MEM_temp;
+
+	DOUBLE* data_G_tp1 = host_MEM_temp.getData<DOUBLE, Rcpp::NumericVector>(G_tp1);
+
+	wrapper->manageEvoMemory(true);
+
+	std::size_t dim_y_tp1[] = { wrapper->getNoSeries(), wrapper->getNSim(), nsteps_arg_3 };
+
+	DOUBLE* data_y_tp1 = host_MEM_temp.host_alloc_vec<DOUBLE>(wrapper->getNSim() * wrapper->getNoSeries() * nsteps_arg_3);
+	DOUBLE* data_F_tp1 = host_MEM_temp.getData<DOUBLE, Rcpp::NumericVector>(F_tp1);
+
+	wrapper->initForecastPriors();
+
+	for (std::size_t k = 0; k < nsteps_arg_3; k++) {
+		if (k > 0) {
+			const DOUBLE* data_G_tp1_pointer_pos = (const DOUBLE*) ((char*) data_G_tp1 + (nsteps_arg_1 > 1) * k * wrapper->getNoSeries() * wrapper->getMaxP() * wrapper->getMaxP() * sizeof(DOUBLE));
+			wrapper->computePrior(data_G_tp1_pointer_pos, true);
+		}
+
+		DOUBLE* data_y_tp1_pointer_pos = (DOUBLE*) ((char*) data_y_tp1 + k * wrapper->getNoSeries() * wrapper->getNSim() * sizeof(DOUBLE));
+		DOUBLE* data_F_tp1_pointer_pos = (DOUBLE*) ((char*) data_F_tp1 + k * wrapper->getNoSeries() * wrapper->getMaxP() * sizeof(DOUBLE));
+		wrapper->computeForecast(data_y_tp1_pointer_pos, data_F_tp1_pointer_pos, true);
+	}
+
+	Rcpp::NumericVector y_tp1 = memory_manager_RCPP::getRcppVector<DOUBLE, Rcpp::NumericVector>(data_y_tp1, dim_arg_3.size(), dim_y_tp1);
 
 	return y_tp1;
 }

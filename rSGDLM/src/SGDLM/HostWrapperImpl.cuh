@@ -41,6 +41,8 @@ public:
 
 	void clearSimMemory();
 
+	void initForecastPriors();
+
 	bool isPrior() const;
 
 	void isPrior(bool is_prior);
@@ -63,11 +65,11 @@ public:
 
 	void setParentalSets(const unsigned int* host_data_p, const unsigned int* host_data_sp_indices);
 
-	void computePrior();
+	void computePrior(bool evolve_forecast_variables);
 
-	void computePrior(const DOUBLE* host_data_G_tp1);
+	void computePrior(const DOUBLE* host_data_G_tp1, bool evolve_forecast_variables);
 
-	void computeForecast(DOUBLE* host_data_y_tp1, const DOUBLE* host_data_x_tp1);
+	void computeForecast(DOUBLE* host_data_y_tp1, const DOUBLE* host_data_x_tp1, bool computeForecast);
 
 	void computePosterior(const DOUBLE* host_data_y_t, const DOUBLE* host_data_F_t);
 
