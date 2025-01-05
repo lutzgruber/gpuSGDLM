@@ -100,15 +100,13 @@ template<typename DOUBLE> inline void sampleGamma(curandGenerator_t gen, memory_
  * memory_uniforms and memory_normals must be of size n * GAMMA_LOOPS * m
  */
 template<typename DOUBLE> inline void sampleGamma2(curandGenerator_t gen, size_t m, size_t n, const DOUBLE* n_t,
-		const DOUBLE* s_t, DOUBLE* memory_uniforms, DOUBLE* memory_normals, DOUBLE** gammas, bool create_new_random_numbers, cudaStream_t stream = 0) {
+		const DOUBLE* s_t, DOUBLE* memory_uniforms, DOUBLE* memory_normals, DOUBLE** gammas, cudaStream_t stream = 0) {
 	size_t n_loops = GAMMA_LOOPS;
 
 	size_t n_input_random_numbers = n * n_loops * m;
 
-	if (create_new_random_numbers) {
-		curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
-		curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
-	}
+	curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
+	curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
 
 	dim3 threadsPerBlock(THREADS_PER_BLOCK, 1);
 	dim3 numBlocks((n + THREADS_PER_BLOCK - 1) / threadsPerBlock.x, m);
@@ -125,6 +123,37 @@ template<typename DOUBLE> inline void sampleGamma2(curandGenerator_t gen, size_t
 
 	make_gamma2<<<numBlocks, threadsPerBlock, m * numBlocks.x * sizeof(unsigned int), stream>>>(m, n, n_loops, fill_indices,
 			memory_uniforms, memory_normals, n_t, s_t, gammas);
+	cudaErrchk(cudaGetLastError());
+}
+
+/**
+ * memory_uniforms and memory_normals must be of size n * GAMMA_LOOPS * m
+ */
+template<typename DOUBLE> inline void sampleBeta(curandGenerator_t gen, size_t m, size_t n, const DOUBLE* r_t,
+		const DOUBLE* beta, DOUBLE* memory_uniforms, DOUBLE* memory_normals, DOUBLE** betas, cudaStream_t stream = 0) {
+	size_t n_loops = GAMMA_LOOPS;
+
+	size_t n_input_random_numbers = n * n_loops * m;
+
+	dim3 threadsPerBlock(THREADS_PER_BLOCK, 1);
+	dim3 numBlocks((n + THREADS_PER_BLOCK - 1) / threadsPerBlock.x, m);
+
+	// create Gamma(alpha, 1.0)
+	curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
+	curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
+
+	unsigned int** fill_indices = NULL;
+	make_gamma_1<<<numBlocks, threadsPerBlock, m * numBlocks.x * sizeof(unsigned int), stream>>>(m, n, n_loops, fill_indices,
+			memory_uniforms, memory_normals, r_t, betas);
+	cudaErrchk(cudaGetLastError());
+
+	// create Beta(alpha, beta) by using the previously created Gamma(alpha, 1.0)
+	curandGenerateUniformX(gen, memory_uniforms, n_input_random_numbers);
+	curandGenerateNormalX(gen, memory_normals, n_input_random_numbers, 0, 1);
+
+	fill_indices = NULL;
+	make_beta<<<numBlocks, threadsPerBlock, m * numBlocks.x * sizeof(unsigned int), stream>>>(m, n, n_loops, fill_indices,
+			memory_uniforms, memory_normals, r_t, beta, betas);
 	cudaErrchk(cudaGetLastError());
 }
 

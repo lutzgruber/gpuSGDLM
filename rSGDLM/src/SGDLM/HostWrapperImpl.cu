@@ -145,8 +145,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initMemory(std::s
 
 		// allocate device memory for discount factors (MEM)
 		P.beta = MEM.device_alloc_vec<DOUBLE>(this->m);
-		P.data_delta = MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p * this->max_p);
-		MEM.cpyToDeviceAsPtrArray<DOUBLE>((const DOUBLE*) P.data_delta, this->m, this->max_p * this->max_p, P.delta); // generate CPU+GPU pointer to individual matrices
+		P.delta = MEM.device_alloc_vec<DOUBLE>(this->m);
 
 		// allocate device memory for simultaneous parental sets (MEM)
 		P.p = MEM.device_alloc_vec<unsigned int>(this->m);
@@ -308,6 +307,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		P.cache_MVN_normals = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->m * P.nsim);
 		P.data_lambdas = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
 		P.data_thetas = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->m * P.nsim);
+		P.data_thetas_buffer = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->m * P.nsim);
 		P.data_Gammas = MEM_sim.device_alloc_vec<DOUBLE>(this->m * this->m * 2 * nsim_batch); // allocate for 2 * nsim_batch: VB_posterior can use double the batch size and forecasting will use the 2nd half for the inverse
 		P.data_chol_C_t = MEM_sim.device_alloc_vec<DOUBLE>(this->max_p * this->max_p * this->m);
 		P.LU_pivots = MEM_sim.device_alloc_vec<int>(this->m * 2 * nsim_batch);
@@ -319,6 +319,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		P.Gammas = NULL;
 		P.thetas = NULL;
 		P.thetas_nrepeat_ptr = NULL;
+		P.thetas_buffer_nrepeat_ptr = NULL;
 		P.lambdas_nrepeat_ptr = NULL;
 		P.chol_C_t = NULL;
 		P.chol_C_t_nrepeat_ptr = NULL;
@@ -334,6 +335,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		MEM_sim.cpyToDeviceAsPtrArrayRepeatByBatch<DOUBLE>(P.data_chol_C_t, this->m, this->max_p * this->max_p, P.nsim,
 				P.chol_C_t_nrepeat_ptr);
 		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.data_thetas, P.nsim, this->m, this->max_p, P.thetas_nrepeat_ptr);
+		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.data_thetas_buffer, P.nsim, this->m, this->max_p, P.thetas_buffer_nrepeat_ptr);
 		MEM_sim.cpyToDeviceAsPtrArrayByCol<DOUBLE>(P.data_lambdas, P.nsim, this->m, 1, P.lambdas_nrepeat_ptr);
 
 		// FOR VB POSTERIOR ESTIMATION
@@ -388,18 +390,22 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std
 		 */
 
 		// allocate device memory
+		P.data_etas = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
 		P.data_x_t = MEM_sim.device_alloc_vec<DOUBLE>(this->m * this->max_p);
 		P.data_y = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
 		P.data_nus = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
 		P.data_Gammas_inv = (DOUBLE*) ((char*) P.data_Gammas + (this->m * this->m * nsim_batch) * sizeof(DOUBLE)); //MEM_sim.device_alloc<DOUBLE>(3, dim_Gammas);
 
 		// define array pointers
+		P.etas = NULL;
 		P.x_t = NULL;
 		P.y = NULL;
 		P.nus = NULL;
 		P.Gammas_inv = NULL;
+		P.G_t_nrepeat_ptr = NULL;
 
 		// assign array pointers
+		MEM_sim.cpyToDeviceAsPtrArray<DOUBLE>(P.data_etas, P.nsim, this->m, P.etas);
 		MEM_sim.cpyToDeviceAsPtrArray<DOUBLE>(P.data_x_t, this->m, this->max_p, P.x_t);
 		MEM_sim.cpyToDeviceAsPtrArray<DOUBLE>(P.data_y, P.nsim, this->m, P.y);
 		MEM_sim.cpyToDeviceAsPtrArray<DOUBLE>(P.data_nus, P.nsim, this->m, P.nus);
@@ -543,8 +549,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::getDiscountFactor
 	}
 
 	if (host_data_delta != NULL) {
-		memory_manager_GPU::cpyToHost<DOUBLE>(P.data_delta, host_data_delta, this->m * this->max_p * this->max_p,
-				P.stream);
+		memory_manager_GPU::cpyToHost<DOUBLE>(P.delta, host_data_delta, this->m, P.stream);
 	}
 
 	cudaErrchk(cudaStreamSynchronize(this->simP[this->main_gpu].stream));
@@ -564,8 +569,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::setDiscountFactor
 		}
 
 		if (host_data_delta != NULL) {
-			memory_manager_GPU::cpyToDevice<DOUBLE>(P.data_delta, host_data_delta, this->m * this->max_p * this->max_p,
-					P.stream);
+			memory_manager_GPU::cpyToDevice<DOUBLE>(P.delta, host_data_delta, this->m, P.stream);
 		}
 	}
 }
@@ -655,10 +659,10 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(bool
 
 		if (evolve_forecast_variables) {
 			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t, P.forecasting_n_t, P.forecasting_s_t, P.beta,
-					(const DOUBLE**) P.delta, P.stream);
+					(const DOUBLE*) P.delta, P.stream);
 		} else {
 			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-					(const DOUBLE**) P.delta, P.stream);
+					(const DOUBLE*) P.delta, P.stream);
 		}
 	}
 
@@ -668,7 +672,9 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(bool
 		cudaErrchk(cudaStreamSynchronize(this->simP[gpu_index].stream));
 	}
 
-	this->isPrior(true);
+	if (!evolve_forecast_variables) {
+		this->isPrior(true);
+	}
 }
 
 template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(const DOUBLE* host_data_G_t, bool evolve_forecast_variables) {
@@ -688,11 +694,11 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(cons
 
 		if (evolve_forecast_variables) {
 			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t, P.forecasting_n_t, P.forecasting_s_t, P.beta,
-					(const DOUBLE**) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
+					(const DOUBLE*) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
 					P.m_t_buffer);
 		} else {
 			SGDLM<DOUBLE>::compute_one_step_ahead_prior(this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-					(const DOUBLE**) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
+					(const DOUBLE*) P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE**) P.G_t, P.C_t_buffer,
 					P.m_t_buffer);
 		}
 	}
@@ -703,11 +709,66 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(cons
 		cudaErrchk(cudaStreamSynchronize(this->simP[gpu_index].stream));
 	}
 
-	this->isPrior(true);
+	if (!evolve_forecast_variables) {
+		this->isPrior(true);
+	}
+}
+
+template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::evolveForecastSamples() {
+	SYSDEBUG_LOGGER << "HostWrapperImpl::evolveForecastSamples()" << ENDL;
+	myAssert(this->checkInitialized());
+	myAssert(this->checkSimInitialized());
+
+	// evolve lambda and theta Monte Carlo samples
+	for (size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
+		startCuda(gpu_index);
+
+		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
+
+		SGDLM<DOUBLE>::evolve_lambdas_and_thetas((const DOUBLE*) P.zero, (const DOUBLE*) P.plus_one, this->m, this->max_p,
+				(const unsigned int*) P.p, (const DOUBLE**) P.forecasting_C_t, (const DOUBLE*) P.forecasting_n_t, (const DOUBLE*) P.forecasting_s_t,
+				(const DOUBLE*) P.beta, (const DOUBLE*) P.delta, (const DOUBLE**) NULL, P.nsim, P.lambdas, P.etas, P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
+				P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t, P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, P.thetas_buffer_nrepeat_ptr, P.stream, P.CUBLAS, P.CURAND);
+	}
+}
+
+template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::evolveForecastSamples(const DOUBLE* host_data_G_tp1) {
+	SYSDEBUG_LOGGER << "HostWrapperImpl::evolveForecastSamples()" << ENDL;
+	myAssert(this->checkInitialized());
+	myAssert(this->checkSimInitialized());
+	myAssert(this->checkUseStateEvolutionMatrix());
+
+	this->setEvolutionMatrix(host_data_G_tp1);
+
+	// assign nrepeat pointers
+	for (size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
+		startCuda(gpu_index);
+
+		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
+
+		memory_manager_GPU& MEM_sim = P.MEM_sim;
+
+		if (P.G_t_nrepeat_ptr == NULL) {
+			MEM_sim.cpyToDeviceAsPtrArrayRepeatByBatch<DOUBLE>(P.data_G_t, this->m, this->max_p * this->max_p, P.nsim,
+					P.G_t_nrepeat_ptr);
+		}
+	}
+
+	// evolve lambda and theta Monte Carlo samples
+	for (size_t gpu_index = 0; gpu_index < this->no_gpus; gpu_index++) {
+		startCuda(gpu_index);
+
+		simPointers<DOUBLE, memory_manager_GPU>& P = this->simP[gpu_index];
+
+		SGDLM<DOUBLE>::evolve_lambdas_and_thetas((const DOUBLE*) P.zero, (const DOUBLE*) P.plus_one, this->m, this->max_p,
+				(const unsigned int*) P.p, (const DOUBLE**) P.forecasting_C_t, (const DOUBLE*) P.forecasting_n_t, (const DOUBLE*) P.forecasting_s_t,
+				(const DOUBLE*) P.beta, (const DOUBLE*) P.delta, (const DOUBLE**) P.G_t_nrepeat_ptr, P.nsim, P.lambdas, P.etas, P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
+				P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t, P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, P.thetas_buffer_nrepeat_ptr, P.stream, P.CUBLAS, P.CURAND);
+	}
 }
 
 template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(DOUBLE* host_data_ytp1,
-		const DOUBLE* host_data_x_tp1, bool create_new_random_numbers) {
+		const DOUBLE* host_data_x_tp1, bool use_existing_lambdas_and_thetas) {
 	SYSDEBUG_LOGGER << "HostWrapperImpl::computeForecast()" << ENDL;
 	myAssert(this->checkInitialized());
 	myAssert(this->checkSimInitialized());
@@ -733,7 +794,7 @@ template<typename DOUBLE> void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(D
 				(const DOUBLE**) P.forecasting_C_t, (const DOUBLE*) P.forecasting_n_t, (const DOUBLE*) P.forecasting_s_t, P.nsim, this->nsim_batch,
 				(const DOUBLE**) P.x_t, P.y, P.data_nus, P.nus, P.lambdas, P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
 				P.cache_MVN_normals_nrepeat_ptr, P.Gammas, P.Gammas_inv, P.LU_pivots, P.LU_infos, P.chol_C_t,
-				P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, create_new_random_numbers, P.stream, P.CUBLAS, P.CURAND);
+				P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr, use_existing_lambdas_and_thetas, P.stream, P.CUBLAS, P.CURAND);
 	}
 
 	// copy results on host memory

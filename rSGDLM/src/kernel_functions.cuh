@@ -180,7 +180,10 @@ template<typename NUM> __global__ void batchedScale(size_t batchCount, size_t nr
 	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	size_t j = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (i < batchCount && j % nrows < change_rows[i] && j < nrows * change_cols[i]) {
+	size_t row = j % nrows;
+	size_t col = j / nrows;
+
+	if (i < batchCount && row < change_rows[i] && col < change_cols[i]) {
 		switch (T) {
 		case SCALE_TRANSFORMATION_SQRT:
 			V[i][j] = V[i][j] * sqrt(c[i]);
@@ -365,6 +368,26 @@ template<typename NUM> __global__ void multiply(size_t length, NUM* V1, const NU
 	}
 }
 
+/**
+ * V1, V2 are arrays of batchCount pointers to no_element-length arrays
+ *
+ * The output is written to V1.
+ *
+ * This function computes:
+ *
+ * for j=1:batchCount
+ *   V1(j,:) = V1(j,:) * V2(j,:)
+ * end
+ */
+template<typename NUM> __global__ void batchedMultiply(size_t batchCount, size_t no_elements, NUM** V1, const NUM** V2) {
+	size_t i = blockIdx.x * blockDim.x + threadIdx.x; // batchCount
+	size_t j = blockIdx.y * blockDim.y + threadIdx.y; // no_elements
+
+	if (i < batchCount && j < no_elements) {
+		V1[i][j] *= V2[i][j];
+	}
+}
+
 /*
  * s_t, n_t, e_t, Q_t are vectors of length length
  *
@@ -452,7 +475,7 @@ template<typename NUM> __global__ void make_gamma(size_t m, size_t n, size_t n_l
  * fill_indices is a matrix of size m x no_blocks; it should contain the number of gamma r.v.'s that are already calculated per block
  * uniforms is a vector of n_loops * n * m U(0,1) random variables
  * normals is a vector of n_loops * n * m N(0,1) random variables
- * alpha, beta are vectors of size m; they are the parameters of the gamma distribution which we want to sample
+ * n_t, s_t are vectors of size m; we derive the parameters of the gamma distribution which we want to sample from these quantities
  * gammas is a matrix of size m x n; the gamma random variables will be stored there
  */
 template<typename NUM> __global__ void make_gamma2(size_t m, size_t n, size_t n_loops, unsigned int** fill_indices,
@@ -504,6 +527,152 @@ template<typename NUM> __global__ void make_gamma2(size_t m, size_t n, size_t n_
 
 					if (i < blockDim.x && base_i + i < n) {
 						gammas[base_i + i][j] = d * v / beta_;
+					}
+				}
+			}
+		}
+
+		__syncthreads();
+
+		if (threadIdx.x == 0 && fill_indices != NULL) {
+			fill_indices[j][blockIdx.x] = counter[j];
+		}
+	}
+}
+
+
+
+/**
+ * fill_indices is a matrix of size m x no_blocks; it should contain the number of gamma r.v.'s that are already calculated per block
+ * uniforms is a vector of n_loops * n * m U(0,1) random variables
+ * normals is a vector of n_loops * n * m N(0,1) random variables
+ * r_t is a vector of size m
+ * gammas is a matrix of size m x n; the Gamma(r_t / 2, 1.0) random variables will be stored there
+ */
+template<typename NUM> __global__ void make_gamma_1(size_t m, size_t n, size_t n_loops, unsigned int** fill_indices,
+		const NUM* uniforms, const NUM* normals, const NUM* r_t, NUM** gammas) {
+	extern __shared__ unsigned int counter[];
+	size_t base_i = blockIdx.x * blockDim.x; // note that we did not include the thread count---this will be replaced by counter!
+	size_t j = blockIdx.y * blockDim.y + threadIdx.y; // m
+
+	if (j < m) {
+		NUM alpha_ = 0.5 * r_t[j];
+		NUM beta_ = 1.0;
+
+		NUM d = alpha_ - 1.0 / 3.0;
+		NUM c = 1 / sqrt(9 * d);
+
+		if (threadIdx.x == 0) {
+			if (fill_indices != NULL) {
+				counter[j] = fill_indices[j][blockIdx.x];
+			} else {
+				counter[j] = 0;
+			}
+		}
+
+		// initialize to zero
+		if (base_i + threadIdx.x < n) {
+			gammas[base_i + threadIdx.x][j] = 0;
+		}
+
+		__syncthreads();
+
+		if (base_i + threadIdx.x < n) {
+			for (size_t k = 0; k < n_loops; k++) {
+				size_t rand_index = j * n_loops * n + k * n + base_i + threadIdx.x;
+
+				NUM x = normals[rand_index];
+
+				NUM v = (1 + c * x) * (1 + c * x) * (1 + c * x);
+
+				if (v <= 0) {
+					continue;
+				}
+
+				NUM x_sq = x * x;
+
+				NUM U = uniforms[rand_index];
+
+				if (U < 1 - 0.331 * x_sq * x_sq || log(U) < 0.5 * x_sq + d * (1 - v + log(v))) {
+					size_t i = atomicAdd(&counter[j], 1);
+
+					if (i < blockDim.x && base_i + i < n) {
+						gammas[base_i + i][j] = d * v / beta_;
+					}
+				}
+			}
+		}
+
+		__syncthreads();
+
+		if (threadIdx.x == 0 && fill_indices != NULL) {
+			fill_indices[j][blockIdx.x] = counter[j];
+		}
+	}
+}
+
+/**
+ * This function transforms Gamma(r_t/2, 1.0) input samples (ga) to Beta(r_t/2, (1/beta - 1)*r_t/2) samples scaled by (1/beta) by drawing Gamma((1/beta - 1)*r_t/2, 1.0) samples (gb) and returning ga / (ga + gb)
+ * fill_indices is a matrix of size m x no_blocks; it should contain the number of gamma r.v.'s that are already calculated per block
+ * uniforms is a vector of n_loops * n * m U(0,1) random variables
+ * normals is a vector of n_loops * n * m N(0,1) random variables
+ * r_t and beta are vectors of size m; this is the second parameter of the Beta distribution we wish to sample
+ * betas is a matrix of size m x n; it must already be filled with Gamma(r_t/2, 1.0)-samples and this function overwrites these initial values with random draws of a Beta(r_t/2, (1/beta - 1) * r_t/2) distribution scaled by (1/beta)
+ */
+template<typename NUM> __global__ void make_beta(size_t m, size_t n, size_t n_loops, unsigned int** fill_indices,
+		const NUM* uniforms, const NUM* normals, const NUM* r_t, const NUM* beta, NUM** betas) {
+	extern __shared__ unsigned int counter[];
+	size_t base_i = blockIdx.x * blockDim.x; // note that we did not include the thread count---this will be replaced by counter!
+	size_t j = blockIdx.y * blockDim.y + threadIdx.y; // m
+
+	if (j < m) {
+		// parameters of the Gamma distribution
+		NUM alpha_ = 0.5 * r_t[j] * (1.0 / beta[j] - 1.0);
+		NUM beta_ = 1.0;
+
+		NUM d = alpha_ - 1.0 / 3.0;
+		NUM c = 1 / sqrt(9 * d);
+
+		if (threadIdx.x == 0) {
+			if (fill_indices != NULL) {
+				counter[j] = fill_indices[j][blockIdx.x];
+			} else {
+				counter[j] = 0;
+			}
+		}
+
+		__syncthreads();
+
+		if (base_i + threadIdx.x < n) {
+			if (beta[j] == 1.0) {
+				// return 1.0 if beta = 1 (this is a no-discounting scenario in which the Beta-random walk equations don't work)
+				size_t i = atomicAdd(&counter[j], 1);
+				if (i < blockDim.x && base_i + i < n) {				
+					betas[base_i + i][j] = 1.0;
+				}
+			} else {
+				for (size_t k = 0; k < n_loops; k++) {
+					size_t rand_index = j * n_loops * n + k * n + base_i + threadIdx.x;
+
+					NUM x = normals[rand_index];
+
+					NUM v = (1 + c * x) * (1 + c * x) * (1 + c * x);
+
+					if (v <= 0) {
+						continue;
+					}
+
+					NUM x_sq = x * x;
+
+					NUM U = uniforms[rand_index];
+
+					if (U < 1 - 0.331 * x_sq * x_sq || log(U) < 0.5 * x_sq + d * (1 - v + log(v))) {
+						size_t i = atomicAdd(&counter[j], 1);
+
+						if (i < blockDim.x && base_i + i < n) {
+							NUM gamma = d * v / beta_;
+							betas[base_i + i][j] = (betas[base_i + i][j] / (betas[base_i + i][j] + gamma)) / beta[j];
+						}
 					}
 				}
 			}
@@ -672,6 +841,23 @@ template<typename NUM> __global__ void compute_VB_vector1(size_t batchSize, size
 
 	if (i < max_p && j < m && k < batchSize) {
 		thetas[k][j * max_p + i] = sqrt(lambdas[k][j]) * (thetas[k][j * max_p + i] - mean_m_t[j][i]);
+	}
+}
+
+// scale omegas by sqrt((1 - delta) / (c_t * lambdas)) and apply cut-off at p
+template<typename NUM> __global__ void scale_omegas(size_t batchSize, size_t m, size_t max_p, const unsigned int* p, const NUM** lambdas,
+		const NUM* delta, const NUM* c_t, NUM** omegas) {
+	size_t i = blockIdx.z * blockDim.z + threadIdx.z; // batchSize * m
+	size_t k = blockIdx.x * blockDim.x + threadIdx.x; // max_p
+
+	size_t j = i % m;
+
+	if (i < m * batchSize && k < max_p) {
+		if (k < p[j]) {
+			omegas[i][k] *= sqrt((1 - delta[j]) / (c_t[j] * lambdas[i][0]));
+		} else {
+			omegas[i][k] = 0;
+		}
 	}
 }
 

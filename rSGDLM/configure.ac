@@ -1,4 +1,4 @@
-AC_INIT([rSGDLM],[1.0.3]) dnl package name, version
+AC_INIT([rSGDLM],[1.1.0]) dnl package name, version
 
 AC_MSG_NOTICE([start of configure.ac for rSGDLM])
 

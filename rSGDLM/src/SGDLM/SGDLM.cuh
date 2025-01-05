@@ -26,7 +26,7 @@ public:
 			DOUBLE** Q_t_ptrptr, DOUBLE** e_t_ptrptr, cublasHandle_t CUBLAS, cudaStream_t stream); // register new data
 
 	static void compute_one_step_ahead_prior(size_t m, size_t max_p, const unsigned int* p, DOUBLE** m_t, DOUBLE** C_t,
-			DOUBLE* n_t, DOUBLE* s_t, const DOUBLE* beta, const DOUBLE** delta, cudaStream_t stream,
+			DOUBLE* n_t, DOUBLE* s_t, const DOUBLE* beta, const DOUBLE* delta, cudaStream_t stream,
 			cublasHandle_t CUBLAS = NULL, const DOUBLE* zero = NULL, const DOUBLE* plus_one = NULL, const DOUBLE** G_t =
 					NULL, DOUBLE** C_t_buffer = NULL, DOUBLE** m_t_buffer = NULL); // change the time t posterior parameters to time t+1 prior parameters
 
@@ -48,14 +48,19 @@ public:
 			DOUBLE** y_tp1_nrepeat_ptr, DOUBLE* data_nus, DOUBLE** nus_nrepeat_ptr, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals,
 			DOUBLE* cache_MVN_normals, DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** Gammas, DOUBLE** Gammas_inv, int* INV_pivots,
 			int* INV_infos, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas,
-			DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND); // simulate the t+1 observations from the prior distribution
+			DOUBLE** thetas_nrepeat_ptr, bool use_existing_lambdas_and_thetas, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND); // simulate the t+1 observations from the prior distribution
 
-private:
-	static void sample_parameters(const DOUBLE* zero, const DOUBLE* plus_one, size_t m, size_t max_p,
+	static void sample_lambdas_and_thetas(const DOUBLE* zero, const DOUBLE* plus_one, size_t m, size_t max_p,
 			const unsigned int* p, const DOUBLE** m_t, const DOUBLE** C_t, const DOUBLE* n_t, const DOUBLE* s_t,
 			size_t n, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals, DOUBLE** cache_MVN_normals_nrepeat_ptr,
-			DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers,
-			cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND);
+			DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND);
+	
+	static void evolve_lambdas_and_thetas(const DOUBLE* zero, const DOUBLE* plus_one, size_t m,
+		size_t max_p, const unsigned int* p, const DOUBLE** R_t, const DOUBLE* r_t,
+		const DOUBLE* c_t, const DOUBLE* beta, const DOUBLE* delta, const DOUBLE** G_t_nrepeat_ptr, size_t n, DOUBLE** lambdas, DOUBLE** etas,
+		DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals,
+		DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** chol_R_t, DOUBLE** chol_R_t_nrepeat_ptr, DOUBLE** thetas,
+		DOUBLE** thetas_nrepeat_ptr, DOUBLE** thetas_buffer_nrepeat_ptr, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND);
 };
 
 }

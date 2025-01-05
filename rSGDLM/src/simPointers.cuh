@@ -29,11 +29,11 @@ template<typename DOUBLE, class memory_manager> struct simPointers {
 
 	DOUBLE* alpha;
 	DOUBLE* beta;
-	DOUBLE* data_delta;
-	DOUBLE** delta;
+	DOUBLE* delta;
 
 	DOUBLE* data_G_t;
 	DOUBLE** G_t;
+	DOUBLE** G_t_nrepeat_ptr;
 
 	DOUBLE* Q_t;
 	DOUBLE** Q_t_ptrptr;
@@ -68,6 +68,8 @@ template<typename DOUBLE, class memory_manager> struct simPointers {
 	DOUBLE* data_thetas;
 	DOUBLE** thetas;
 	DOUBLE** thetas_nrepeat_ptr;
+	DOUBLE* data_thetas_buffer;
+	DOUBLE** thetas_buffer_nrepeat_ptr;
 
 	// only VB posterior simulation
 	DOUBLE* IS_weights;
@@ -86,6 +88,8 @@ template<typename DOUBLE, class memory_manager> struct simPointers {
 	DOUBLE* mean_Q_t;
 
 	// only forecasting
+	DOUBLE* data_etas;
+	DOUBLE** etas; // multiplicative innovations for lambdas
 	DOUBLE* data_y;
 	DOUBLE** y;
 	DOUBLE* data_x_t;

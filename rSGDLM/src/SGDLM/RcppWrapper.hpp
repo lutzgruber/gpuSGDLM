@@ -41,7 +41,7 @@ public:
 
 	Rcpp::List getDiscountFactors() const;
 
-	void setDiscountFactors(const std::vector<DOUBLE>& beta, const Rcpp::NumericVector& delta);
+	void setDiscountFactors(const std::vector<DOUBLE>& beta, const std::vector<DOUBLE>& delta);
 
 	Rcpp::List getParameters() const;
 

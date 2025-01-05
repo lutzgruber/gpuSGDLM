@@ -65,7 +65,11 @@ public:
 
 	virtual void computePrior(const DOUBLE* host_data_G_tp1, bool evolve_forecast_variables) = 0;
 
-	virtual void computeForecast(DOUBLE* host_data_ytp1, const DOUBLE* host_data_x_tp1, bool computeForecast) = 0;
+	virtual void evolveForecastSamples() = 0;
+
+	virtual void evolveForecastSamples(const DOUBLE* host_data_G_tp1) = 0;
+
+	virtual void computeForecast(DOUBLE* host_data_ytp1, const DOUBLE* host_data_x_tp1, bool use_existing_lambdas_and_thetas) = 0;
 
 	virtual void computePosterior(const DOUBLE* host_data_y_t, const DOUBLE* host_data_F_t) = 0;
 

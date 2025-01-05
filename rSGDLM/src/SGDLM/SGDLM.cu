@@ -96,7 +96,7 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::compute_posterior(const DOU
 
 template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::compute_one_step_ahead_prior(size_t m, size_t max_p,
 		const unsigned int* p, DOUBLE** m_t, DOUBLE** C_t, DOUBLE* n_t, DOUBLE* s_t, const DOUBLE* beta,
-		const DOUBLE** delta, cudaStream_t stream, cublasHandle_t CUBLAS, const DOUBLE* zero, const DOUBLE* plus_one,
+		const DOUBLE* delta, cudaStream_t stream, cublasHandle_t CUBLAS, const DOUBLE* zero, const DOUBLE* plus_one,
 		const DOUBLE** G_t, DOUBLE** C_t_buffer, DOUBLE** m_t_buffer) {
 	SYSDEBUG_LOGGER << "SGDLM::compute_one_step_ahead_prior()" << ENDL;
 
@@ -112,7 +112,7 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::compute_one_step_ahead_prio
 	SYSDEBUG_LOGGER << "... numBlocks = (" << numBlocks.x << ", " << numBlocks.y << ")" << ENDL;
 	//batchedScale<<<numBlocks, threadsPerBlock, 0, stream>>>(m, max_p, p, p, C_t, delta, SCALE_TRANSFORMATION_INV);
 	//batchedMatrixDiagScale<<<numBlocks, threadsPerBlock, threadsPerBlock.x * max_p * sizeof(DOUBLE), stream>>>(m, max_p, p, p, C_t, delta, SCALE_TRANSFORMATION_INV);
-	batchedMatrixScale<<<numBlocks, threadsPerBlock, 0, stream>>>(m, max_p, p, p, C_t, delta, SCALE_TRANSFORMATION_INV); // CHANGED ON 2014/9/23
+	batchedScale<<<numBlocks, threadsPerBlock, 0, stream>>>(m, max_p, p, p, C_t, delta, SCALE_TRANSFORMATION_INV); // CHANGED ON 2014/9/23
 	cudaErrchk(cudaGetLastError());
 	//batchedScale<<<numBlocks, threadsPerBlock>>>(m, max_p * max_p, C_t, (const DOUBLE*) delta, SCALE_TRANSFORMATION_INV);
 	SYSDEBUG_LOGGER << "... after R_t = C_t / delta" << ENDL;
@@ -156,8 +156,8 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::VB_posterior(const DOUBLE* 
 	cublasErrchk(cublasSetStream(CUBLAS, stream));
 
 	// sample lambdas ~ Gamma(n_t/2, n_t*s_t/2); thetas ~ N(m_t, C_t/(s_t*lambda_t))
-	SGDLM<DOUBLE>::sample_parameters(zero, plus_one, m, max_p, p, m_t, C_t, n_t, s_t, n, lambdas, cache_gamma_uniforms, cache_gamma_normals,
-			cache_MVN_normals, cache_MVN_normals_nrepeat_ptr, chol_C_t, chol_C_t_nrepeat_ptr, thetas, thetas_nrepeat_ptr, true, stream, CUBLAS, CURAND);
+	SGDLM<DOUBLE>::sample_lambdas_and_thetas(zero, plus_one, m, max_p, p, m_t, C_t, n_t, s_t, n, lambdas, cache_gamma_uniforms, cache_gamma_normals,
+			cache_MVN_normals, cache_MVN_normals_nrepeat_ptr, chol_C_t, chol_C_t_nrepeat_ptr, thetas, thetas_nrepeat_ptr, stream, CUBLAS, CURAND);
 
 	dim3 threadsPerBlock, numBlocks;
 
@@ -404,15 +404,20 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::forecast(const DOUBLE* zero
 		const DOUBLE* n_t, const DOUBLE* s_t, size_t n, size_t Gammas_batch_size, const DOUBLE** const x_tp1,
 		DOUBLE** y_tp1_nrepeat_ptr, DOUBLE* data_nus, DOUBLE** nus_nrepeat_ptr, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms,
 		DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals, DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** Gammas, DOUBLE** Gammas_inv, int* INV_pivots,
-		int* INV_infos, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers,
+		int* INV_infos, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas, DOUBLE** thetas_nrepeat_ptr, bool use_existing_lambdas_and_thetas,
 		cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND) {
 	SYSDEBUG_LOGGER << "SGDLM::forecast()" << ENDL;
 
 	cublasErrchk(cublasSetStream(CUBLAS, stream));
 
-	// sample lambdas ~ Gamma(n_t/2, n_t*s_t/2); thetas ~ N(m_t, C_t/(s_t*lambda_t))
-	SGDLM<DOUBLE>::sample_parameters(zero, plus_one, m, max_p, p, m_t, C_t, n_t, s_t, n, lambdas, cache_gamma_uniforms, cache_gamma_normals, cache_MVN_normals,
-			cache_MVN_normals_nrepeat_ptr, chol_C_t, chol_C_t_nrepeat_ptr, thetas, thetas_nrepeat_ptr, create_new_random_numbers, stream, CUBLAS, CURAND);
+	if (use_existing_lambdas_and_thetas) {
+		// use existing lambdas and thetas
+		// this should only be set to true for multi-step forecasting, when the evolutions were already applied to lambdas and thetas
+	} else {
+		// sample lambdas ~ Gamma(n_t/2, n_t*s_t/2); thetas ~ N(m_t, C_t/(s_t*lambda_t))
+		SGDLM<DOUBLE>::sample_lambdas_and_thetas(zero, plus_one, m, max_p, p, m_t, C_t, n_t, s_t, n, lambdas, cache_gamma_uniforms, cache_gamma_normals, cache_MVN_normals,
+				cache_MVN_normals_nrepeat_ptr, chol_C_t, chol_C_t_nrepeat_ptr, thetas, thetas_nrepeat_ptr, stream, CUBLAS, CURAND);
+	}
 
 	dim3 threadsPerBlock, numBlocks;
 
@@ -482,28 +487,23 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::forecast(const DOUBLE* zero
 	}
 }
 
-template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::sample_parameters(const DOUBLE* zero, const DOUBLE* plus_one, size_t m,
+template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::sample_lambdas_and_thetas(const DOUBLE* zero, const DOUBLE* plus_one, size_t m,
 		size_t max_p, const unsigned int* p, const DOUBLE** m_t, const DOUBLE** C_t, const DOUBLE* n_t,
 		const DOUBLE* s_t, size_t n, DOUBLE** lambdas, DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals,
 		DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** chol_C_t, DOUBLE** chol_C_t_nrepeat_ptr, DOUBLE** thetas,
-		DOUBLE** thetas_nrepeat_ptr, bool create_new_random_numbers, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND) {
-	SYSDEBUG_LOGGER << "SGDLM::sample_parameters()" << ENDL;
+		DOUBLE** thetas_nrepeat_ptr, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND) {
+	SYSDEBUG_LOGGER << "SGDLM::sample_lambdas_and_thetas()" << ENDL;
 
 	cublasErrchk(cublasSetStream(CUBLAS, stream));
 
 	// sample lambda ~ Gamma(n_t/2, n_t*s_t/2)
-	// point to memory from cache_gamma_uniforms to use as cache; max_p must be greater than or equal to 4 for this to work with GAMMA_LOOPS = 2
-	sampleGamma2(CURAND, m, n, n_t, s_t, cache_gamma_uniforms, cache_gamma_normals, lambdas, create_new_random_numbers, stream);
+	sampleGamma2(CURAND, m, n, n_t, s_t, cache_gamma_uniforms, cache_gamma_normals, lambdas, stream);
 
 	SYSDEBUG_LOGGER << "after sampling lambdas ~ Gamma(n_t/2, n_t*s_t/2)" << ENDL;
 
 	// sample theta ~ N(0,1)
-	if (create_new_random_numbers) {
-		curandGenerateNormalX(CURAND, cache_MVN_normals, n * m * max_p, 0, 1);
-		SYSDEBUG_LOGGER << "after sampling randoms ~ N(0,1)" << ENDL;
-	} else {
-		SYSDEBUG_LOGGER << "re-using previously sampled randoms ~ N(0,1)" << ENDL;
-	}
+	curandGenerateNormalX(CURAND, cache_MVN_normals, n * m * max_p, 0, 1);
+	SYSDEBUG_LOGGER << "after sampling randoms ~ N(0,1)" << ENDL;
 
 	// Cholesky of C_t
 	dim3 threadsPerBlock(1, THREADS_PER_BLOCK);
@@ -529,7 +529,71 @@ template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::sample_parameters(const DOU
 			(const DOUBLE*) s_t, thetas); // divide by sqrt(s_t * lambda_t), then add m_t as mean value
 	cudaErrchk(cudaGetLastError());
 
-	SYSDEBUG_LOGGER << "after thetas += m_t" << ENDL;
+	SYSDEBUG_LOGGER << "after thetas = thetas / sqrt(s_t * lambda_t) + m_t" << ENDL;
+}
+
+template<typename DOUBLE> void SGDLM::SGDLM<DOUBLE>::evolve_lambdas_and_thetas(const DOUBLE* zero, const DOUBLE* plus_one, size_t m,
+		size_t max_p, const unsigned int* p, const DOUBLE** R_t, const DOUBLE* r_t,
+		const DOUBLE* c_t, const DOUBLE* beta, const DOUBLE* delta, const DOUBLE** G_t_nrepeat_ptr, size_t n, DOUBLE** lambdas, DOUBLE** etas,
+		DOUBLE* cache_gamma_uniforms, DOUBLE* cache_gamma_normals, DOUBLE* cache_MVN_normals,
+		DOUBLE** cache_MVN_normals_nrepeat_ptr, DOUBLE** chol_R_t, DOUBLE** chol_R_t_nrepeat_ptr, DOUBLE** thetas,
+		DOUBLE** thetas_nrepeat_ptr, DOUBLE** thetas_buffer_nrepeat_ptr, cudaStream_t stream, cublasHandle_t CUBLAS, curandGenerator_t CURAND) {
+	SYSDEBUG_LOGGER << "SGDLM::evolve_parameter_samples()" << ENDL;
+
+	cublasErrchk(cublasSetStream(CUBLAS, stream));
+
+	// sample eta ~ Beta(r_t/2, (1/beta - 1) * r_t/2); this function returns eta = 1 if beta = 1
+	sampleBeta(CURAND, m, n, r_t, beta, cache_gamma_uniforms, cache_gamma_normals, etas, stream);
+	SYSDEBUG_LOGGER << "after sampling etas ~ Beta(r_t/2, (1/beta - 1) * r_t/2) / beta" << ENDL;
+
+	// set lambdas = lambdas * etas
+	dim3 threadsPerBlock(THREADS_PER_BLOCK, 1);
+	dim3 numBlocks((n + THREADS_PER_BLOCK - 1) / threadsPerBlock.x, m);
+	batchedMultiply<<<numBlocks, threadsPerBlock, 0, stream>>>(n, m, lambdas, (const DOUBLE**) etas);
+	cudaErrchk(cudaGetLastError());
+	SYSDEBUG_LOGGER << "after evolving lambdas = lambdas * etas" << ENDL;
+
+	// sample omegas ~ N(0,1)
+	curandGenerateNormalX(CURAND, cache_MVN_normals, n * m * max_p, 0, 1);
+	SYSDEBUG_LOGGER << "after sampling omegas ~ N(0,1)" << ENDL;
+
+	// scale omegas *= sqrt(1 - delta) / sqrt(c_t * lambda_t)
+	// cache_MVN_normals_nrepeat_ptr is has (n*m) entries; each entry is a vector of length max_p
+	// lambda_t has (n*m) entries; each entry is a vector of length 1
+	// delta and c_t have m entries
+	threadsPerBlock = dim3(THREADS_PER_BLOCK / max_p, max_p);
+	numBlocks = dim3(((n * m) + THREADS_PER_BLOCK - 1) / threadsPerBlock.x, 1);
+	scale_omegas<<<numBlocks, threadsPerBlock, 0, stream>>>(n, m, max_p, p, (const DOUBLE**) lambdas, delta, c_t, cache_MVN_normals_nrepeat_ptr);
+	cudaErrchk(cudaGetLastError());
+	SYSDEBUG_LOGGER << "after scaling omegas *= sqrt((1 - delta) / (c_t * lambda_t)) and cutting off at p" << ENDL;
+
+	// apply state evolution matrix to thetas (thetas_t = G_t * thetas_{t-1})
+	if (G_t_nrepeat_ptr != NULL) {
+		threadsPerBlock = dim3(max_p, THREADS_PER_BLOCK / max_p);
+		numBlocks = dim3(1, (n * m + threadsPerBlock.y - 1) / threadsPerBlock.y);
+		batchedCopy<<<numBlocks, threadsPerBlock, 0, stream>>>(n * m, max_p, (const DOUBLE**) thetas_nrepeat_ptr, thetas_buffer_nrepeat_ptr);
+		cublasXgemmBatched(CUBLAS, CUBLAS_OP_N, CUBLAS_OP_N, max_p, 1, max_p, plus_one, G_t_nrepeat_ptr, max_p,
+				(const DOUBLE**) thetas_buffer_nrepeat_ptr, max_p, zero, thetas_nrepeat_ptr, max_p, n * m);
+		SYSDEBUG_LOGGER << "after thetas = G_t * thetas" << ENDL;
+	}
+
+	// Cholesky of R_t
+	threadsPerBlock = dim3(1, THREADS_PER_BLOCK);
+	numBlocks = dim3(1, (m + threadsPerBlock.y - 1) / threadsPerBlock.y);
+	cholesky<<<numBlocks, threadsPerBlock, 0, stream>>>(m, max_p, max_p, (const unsigned int*) p, (const DOUBLE**) R_t,
+			chol_R_t);
+	cudaErrchk(cudaGetLastError());
+	//cudaErrchk(cudaDeviceSynchronize());
+
+	SYSDEBUG_LOGGER << "after calculating the cholesky factorization of R_t" << ENDL;
+
+	// make MVN from iid standard normals and add to thetas: thetas += chol(R_t) * omegas
+	cublasXgemmBatched(CUBLAS, CUBLAS_OP_T, CUBLAS_OP_N, max_p, 1, max_p, plus_one,
+			(const DOUBLE**) chol_R_t_nrepeat_ptr, max_p, (const DOUBLE**) cache_MVN_normals_nrepeat_ptr, max_p, plus_one,
+			thetas_nrepeat_ptr, max_p, m * n);
+	//cudaErrchk(cudaDeviceSynchronize());
+
+	SYSDEBUG_LOGGER << "after thetas += chol(R_t) * omegas" << ENDL;
 }
 
 /*
