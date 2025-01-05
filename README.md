@@ -55,8 +55,8 @@ m = 4
 
 # set discount factors
 beta = rep(.95,m)
-Delta = array(.975,c(max(p),max(p),m))
-sgdlm1$setDiscountFactors(beta, Delta)
+delta = rep(.975,m)
+sgdlm1$setDiscountFactors(beta, delta)
 
 # set initial parameters
 a = array(0, c(max(p), m))
