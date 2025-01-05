@@ -1,14 +1,14 @@
 DEFINES = -DUSE_RCPP -DMAX_NO_GPUS=32 -DDOUBLETYPE=double -DLOGGER_LOG_LEVEL_ACTIVE=100 -DTHREADS_PER_BLOCK=512 -DOPTIM_PRECISION=0.000001 -DOPTIM_MAX_ITER=50 -DGAMMA_LOOPS=2
 
-# C++ compiler flags 
+#C++ compiler flags 
 PKG_CPPFLAGS= $(DEFINES) -I.
 
-# NVCC compiler flags
+#NVCC compiler flags
 NVCC = nvcc
 NVCC_INC = -I@CUDA_INC_PATH@
 NVCC_FLAGS = -Xcompiler -fPIC -c $(PKG_CPPFLAGS) $(NVCC_INC) @NVCC_GENCODE_FLAGS@ @NVCC_CUSTOM_FLAGS@
 
-# Linker flags to external shared objects libraries
+#Linker flags to external shared objects libraries
 PKG_LIBS = -L@CUDA_LIB_PATH@ -lcudart -lcublas -lcurand
 
 ### Define objects

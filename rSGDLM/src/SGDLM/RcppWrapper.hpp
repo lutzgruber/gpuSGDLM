@@ -22,57 +22,72 @@
 
 namespace SGDLM {
 
-template<typename DOUBLE>
-class RcppWrapper {
+template <typename DOUBLE> class RcppWrapper {
 public:
-	RcppWrapper();
+  RcppWrapper();
 
-	RcppWrapper(std::size_t no_gpus);
+  RcppWrapper(std::size_t no_gpus);
 
-	~RcppWrapper();
+  ~RcppWrapper();
 
-	void clearGPUAllMemory();
+  void clearGPUAllMemory();
 
-	void clearGPUSimMemory();
+  void clearGPUSimMemory();
 
-	Rcpp::List getSimultaneousParents() const;
+  Rcpp::List getSimultaneousParents() const;
 
-	void setSimultaneousParents(const std::vector<unsigned int>& p, const Rcpp::IntegerVector& sp);
+  void setSimultaneousParents(const std::vector<unsigned int> &p,
+                              const Rcpp::IntegerVector &sp);
 
-	Rcpp::List getDiscountFactors() const;
+  Rcpp::List getDiscountFactors() const;
 
-	void setDiscountFactors(const std::vector<DOUBLE>& beta, const std::vector<DOUBLE>& delta);
+  void setDiscountFactors(const std::vector<DOUBLE> &beta,
+                          const std::vector<DOUBLE> &delta);
 
-	Rcpp::List getParameters() const;
+  Rcpp::List getParameters() const;
 
-	void setPriorParameters(const Rcpp::NumericVector& m_t, const Rcpp::NumericVector& C_t, const std::vector<DOUBLE>& n_t, const std::vector<DOUBLE>& s_t);
+  void setPriorParameters(const Rcpp::NumericVector &m_t,
+                          const Rcpp::NumericVector &C_t,
+                          const std::vector<DOUBLE> &n_t,
+                          const std::vector<DOUBLE> &s_t);
 
-	void setPosteriorParameters(const Rcpp::NumericVector& m_t, const Rcpp::NumericVector& C_t, const std::vector<DOUBLE>& n_t, const std::vector<DOUBLE>& s_t);
+  void setPosteriorParameters(const Rcpp::NumericVector &m_t,
+                              const Rcpp::NumericVector &C_t,
+                              const std::vector<DOUBLE> &n_t,
+                              const std::vector<DOUBLE> &s_t);
 
-	void computePosterior(const std::vector<DOUBLE>& y_t, const Rcpp::NumericVector& F_t);
+  void computePosterior(const std::vector<DOUBLE> &y_t,
+                        const Rcpp::NumericVector &F_t);
 
-	Rcpp::List computeVBPosterior(std::size_t nsim, std::size_t nsim_batch);
+  Rcpp::List computeVBPosterior(std::size_t nsim, std::size_t nsim_batch);
 
-	void computePrior();
+  void computePrior();
 
-	void computeEvoPrior(const Rcpp::NumericVector& G_tp1);
+  void computeEvoPrior(const Rcpp::NumericVector &G_tp1);
 
-	Rcpp::NumericVector computeForecast(std::size_t nsim, std::size_t nsim_batch, const Rcpp::NumericVector& F_tp1);
+  Rcpp::NumericVector computeForecast(std::size_t nsim, std::size_t nsim_batch,
+                                      const Rcpp::NumericVector &F_tp1);
 
-	Rcpp::NumericVector computeEvoForecast(std::size_t nsim, std::size_t nsim_batch, const Rcpp::NumericVector& F_tp1, const Rcpp::NumericVector& G_tp1);
+  Rcpp::NumericVector computeEvoForecast(std::size_t nsim,
+                                         std::size_t nsim_batch,
+                                         const Rcpp::NumericVector &F_tp1,
+                                         const Rcpp::NumericVector &G_tp1);
 
-	std::size_t getLogLevel() const;
+  std::size_t getLogLevel() const;
 
-	void setLogLevel(std::size_t loglevel);
+  void setLogLevel(std::size_t loglevel);
+
 private:
-	SGDLM::HostWrapper<DOUBLE>* wrapper;
+  SGDLM::HostWrapper<DOUBLE> *wrapper;
 
-	void setParameters(const Rcpp::NumericVector& m_t, const Rcpp::NumericVector& C_t, const std::vector<DOUBLE>& n_t, const std::vector<DOUBLE>& s_t, bool is_prior);
+  void setParameters(const Rcpp::NumericVector &m_t,
+                     const Rcpp::NumericVector &C_t,
+                     const std::vector<DOUBLE> &n_t,
+                     const std::vector<DOUBLE> &s_t, bool is_prior);
 };
 
-}
+} // namespace SGDLM
 
 #endif
-
 
 #endif /* RCPPWRAPPER_CUH_ */

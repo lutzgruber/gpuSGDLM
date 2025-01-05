@@ -9,121 +9,122 @@
 #define SIMPOINTERS_CUH_
 
 namespace SGDLM {
-template<typename DOUBLE, class memory_manager> struct simPointers {
-	// ALL POINTERS RESIDE ON THE GPU
+template <typename DOUBLE, class memory_manager> struct simPointers {
+  // ALL POINTERS RESIDE ON THE GPU
 
-	// POINTERS FOR SGDLM OBJECTS
-	unsigned int* sp_indices;
-	unsigned int* p;
+  // POINTERS FOR SGDLM OBJECTS
+  unsigned int *sp_indices;
+  unsigned int *p;
 
-	DOUBLE* s_t;
-	DOUBLE* n_t;
-	DOUBLE* data_m_t;
-	DOUBLE** m_t;
-	DOUBLE* data_m_t_buffer;
-	DOUBLE** m_t_buffer;
-	DOUBLE* data_C_t;
-	DOUBLE** C_t;
-	DOUBLE* data_C_t_buffer;
-	DOUBLE** C_t_buffer;
+  DOUBLE *s_t;
+  DOUBLE *n_t;
+  DOUBLE *data_m_t;
+  DOUBLE **m_t;
+  DOUBLE *data_m_t_buffer;
+  DOUBLE **m_t_buffer;
+  DOUBLE *data_C_t;
+  DOUBLE **C_t;
+  DOUBLE *data_C_t_buffer;
+  DOUBLE **C_t_buffer;
 
-	DOUBLE* alpha;
-	DOUBLE* beta;
-	DOUBLE* delta;
+  DOUBLE *alpha;
+  DOUBLE *beta;
+  DOUBLE *delta;
 
-	DOUBLE* data_G_t;
-	DOUBLE** G_t;
-	DOUBLE** G_t_nrepeat_ptr;
+  DOUBLE *data_G_t;
+  DOUBLE **G_t;
+  DOUBLE **G_t_nrepeat_ptr;
 
-	DOUBLE* Q_t;
-	DOUBLE** Q_t_ptrptr;
-	DOUBLE* e_t;
-	DOUBLE** e_t_ptrptr;
-	DOUBLE* data_A_t;
-	DOUBLE** A_t;
+  DOUBLE *Q_t;
+  DOUBLE **Q_t_ptrptr;
+  DOUBLE *e_t;
+  DOUBLE **e_t_ptrptr;
+  DOUBLE *data_A_t;
+  DOUBLE **A_t;
 
-	DOUBLE* y_t;
-	DOUBLE* data_F_t;
-	DOUBLE** F_t;
+  DOUBLE *y_t;
+  DOUBLE *data_F_t;
+  DOUBLE **F_t;
 
-	DOUBLE* zero;
-	DOUBLE* plus_one;
-	DOUBLE* minus_one;
+  DOUBLE *zero;
+  DOUBLE *plus_one;
+  DOUBLE *minus_one;
 
-	// BEGIN SIMULATION GPU POINTERS
-	// VB posterior simulation AND forecasting
-	DOUBLE* data_lambdas;
-	DOUBLE** lambdas;
-	DOUBLE* cache_gamma_uniforms;
-	DOUBLE* cache_gamma_normals;
-	DOUBLE* cache_MVN_normals;
-	DOUBLE** cache_MVN_normals_nrepeat_ptr;
-	DOUBLE* data_Gammas;
-	DOUBLE** Gammas;
-	int* LU_pivots;
-	int* LU_infos;
-	DOUBLE* data_chol_C_t;
-	DOUBLE** chol_C_t;
-	DOUBLE** chol_C_t_nrepeat_ptr;
-	DOUBLE* data_thetas;
-	DOUBLE** thetas;
-	DOUBLE** thetas_nrepeat_ptr;
-	DOUBLE* data_thetas_buffer;
-	DOUBLE** thetas_buffer_nrepeat_ptr;
+  // BEGIN SIMULATION GPU POINTERS
+  // VB posterior simulation AND forecasting
+  DOUBLE *data_lambdas;
+  DOUBLE **lambdas;
+  DOUBLE *cache_gamma_uniforms;
+  DOUBLE *cache_gamma_normals;
+  DOUBLE *cache_MVN_normals;
+  DOUBLE **cache_MVN_normals_nrepeat_ptr;
+  DOUBLE *data_Gammas;
+  DOUBLE **Gammas;
+  int *LU_pivots;
+  int *LU_infos;
+  DOUBLE *data_chol_C_t;
+  DOUBLE **chol_C_t;
+  DOUBLE **chol_C_t_nrepeat_ptr;
+  DOUBLE *data_thetas;
+  DOUBLE **thetas;
+  DOUBLE **thetas_nrepeat_ptr;
+  DOUBLE *data_thetas_buffer;
+  DOUBLE **thetas_buffer_nrepeat_ptr;
 
-	// only VB posterior simulation
-	DOUBLE* IS_weights;
-	DOUBLE* sum_det_weights;
-	DOUBLE* mean_lambdas;
-	DOUBLE* mean_log_lambdas;
-	DOUBLE* data_mean_m_t;
-	DOUBLE* data_mean_C_t;
-	DOUBLE** mean_m_t;
-	DOUBLE** mean_C_t;
-	int* INV_pivots;
-	int* INV_infos;
-	DOUBLE** lambdas_nrepeat_ptr;
-	DOUBLE* mean_n_t;
-	DOUBLE* mean_s_t;
-	DOUBLE* mean_Q_t;
+  // only VB posterior simulation
+  DOUBLE *IS_weights;
+  DOUBLE *sum_det_weights;
+  DOUBLE *mean_lambdas;
+  DOUBLE *mean_log_lambdas;
+  DOUBLE *data_mean_m_t;
+  DOUBLE *data_mean_C_t;
+  DOUBLE **mean_m_t;
+  DOUBLE **mean_C_t;
+  int *INV_pivots;
+  int *INV_infos;
+  DOUBLE **lambdas_nrepeat_ptr;
+  DOUBLE *mean_n_t;
+  DOUBLE *mean_s_t;
+  DOUBLE *mean_Q_t;
 
-	// only forecasting
-	DOUBLE* data_etas;
-	DOUBLE** etas; // multiplicative innovations for lambdas
-	DOUBLE* data_y;
-	DOUBLE** y;
-	DOUBLE* data_x_t;
-	DOUBLE** x_t;
-	DOUBLE* data_nus;
-	DOUBLE** nus;
-	DOUBLE* data_Gammas_inv;
-	DOUBLE** Gammas_inv;
-	// copy s_t, n_t, m_t, C_t to enable multi step prior evolutions without disturbing the sequential learning routine
-	DOUBLE* forecasting_s_t;
-	DOUBLE* forecasting_n_t;
-	DOUBLE* forecasting_data_m_t;
-	DOUBLE** forecasting_m_t;
-	DOUBLE* forecasting_data_C_t;
-	DOUBLE** forecasting_C_t;
+  // only forecasting
+  DOUBLE *data_etas;
+  DOUBLE **etas; // multiplicative innovations for lambdas
+  DOUBLE *data_y;
+  DOUBLE **y;
+  DOUBLE *data_x_t;
+  DOUBLE **x_t;
+  DOUBLE *data_nus;
+  DOUBLE **nus;
+  DOUBLE *data_Gammas_inv;
+  DOUBLE **Gammas_inv;
+  // copy s_t, n_t, m_t, C_t to enable multi step prior evolutions without
+  // disturbing the sequential learning routine
+  DOUBLE *forecasting_s_t;
+  DOUBLE *forecasting_n_t;
+  DOUBLE *forecasting_data_m_t;
+  DOUBLE **forecasting_m_t;
+  DOUBLE *forecasting_data_C_t;
+  DOUBLE **forecasting_C_t;
 
-	// number of simulations
-	size_t nsim;
+  // number of simulations
+  size_t nsim;
 
-	// memory manager
-	memory_manager MEM;
-	memory_manager MEM_evo;
-	memory_manager MEM_sim;
+  // memory manager
+  memory_manager MEM;
+  memory_manager MEM_evo;
+  memory_manager MEM_sim;
 
-	// Stream for asynchronous command execution
-	cudaStream_t stream;
+  // Stream for asynchronous command execution
+  cudaStream_t stream;
 
-	// cuBlas
-	cublasHandle_t CUBLAS;
+  // cuBlas
+  cublasHandle_t CUBLAS;
 
-	// cuRand
-	curandGenerator_t CURAND;
+  // cuRand
+  curandGenerator_t CURAND;
 };
 
-}
+} // namespace SGDLM
 
 #endif /* SIMPOINTERS_CUH_ */
