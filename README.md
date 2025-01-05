@@ -109,7 +109,7 @@ for(t in 2:T) {
     F_tp1=array(0, c(max(p), m))
     F_tp1[1,1:3] = 1 # local intercept for series j=1,2,3
     F_tp1[2,c(1,3)] = y[t,c(1,3)] # AR1-term for series j=1,3
-    F_tp1[3,3] = true_means[t+1] # true mean predictor for series j=3 (unrealistic in practice!)
+    F_tp1[3,3] = true_means[t+1] # true mean predictor for series j=3 (we are unlikely to know true means in the real world!)
   
     # compute forecasts 
     y.forecasts = sgdlm1$computeForecast(10000, 10000, F_tp1)
@@ -124,11 +124,66 @@ for(t in 2:T) {
 par(mfrow = c(2, 2))
 plot(y[,1], type = 'l')
 lines(mean_forecasts[,1], col = 'red')
+lines(upper_bound_forecasts[,1], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,1], col = 'red', lty = 'dashed')
 plot(y[,2], type = 'l')
 lines(mean_forecasts[,2], col = 'red')
+lines(upper_bound_forecasts[,2], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,2], col = 'red', lty = 'dashed')
 plot(y[,3], type = 'l')
 lines(mean_forecasts[,3], col = 'red')
+lines(upper_bound_forecasts[,3], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,3], col = 'red', lty = 'dashed')
 plot(y[,4], type = 'l')
 lines(mean_forecasts[,4], col = 'red')
+lines(upper_bound_forecasts[,4], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,4], col = 'red', lty = 'dashed')
 ```
 ![Forecast and observed data](README-plot1.jpg)
+
+
+### Evolution priors
+
+The method `computeEvoPrior` accepts the evolution matrices `G_tp1` as an input argument.
+
+```r
+sgdlm1$computePosterior(y_t, F_t)
+
+print(sgdlm1$getParameters()$m)
+
+sgdlm1$computeEvoPrior(
+  G_tp1 = array(1.1 * diag(max(p)), c(max(p), max(p), m))
+)
+
+print(sgdlm1$getParameters()$m)
+```
+
+### Multi-step forecasts
+
+The `computeForecast` method creates multi step ahead forecasts, if the input argument `F_tp1` is an array with more than one entry in the third dimension. The `computeEvoForecast` method accepts an additional input `G_tp1` for multi-step ahead prior evolutions; `G_tp1` can be a 3D for time-invariant evolutions or a 4D array time-varying evolutions.
+
+```r
+multi_step_forecasts = sgdlm1$computeForecast(
+  nsim = 10000,
+  nsim_batch = 10000,
+  F_tp1 = array(F_tp1, c(dim(F_tp1), 5))
+)
+mean_forecasts = t(apply(multi_step_forecasts, c(1, 3), mean))
+upper_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .95, na.rm = TRUE))
+lower_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .05, na.rm = TRUE))
+
+par(mfrow = c(2, 2))
+plot(mean_forecasts[,1], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,1], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,1], col = 'red', lty = 'dashed')
+plot(mean_forecasts[,2], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,2], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,2], col = 'red', lty = 'dashed')
+plot(mean_forecasts[,3], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,3], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,3], col = 'red', lty = 'dashed')
+plot(mean_forecasts[,4], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,4], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,4], col = 'red', lty = 'dashed')
+```
+![Forecast and observed data](README-plot2.jpg)
