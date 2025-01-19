@@ -611,7 +611,8 @@ __global__ void make_gamma2(size_t m, size_t n, size_t n_loops,
 template <typename NUM>
 __global__ void make_gamma_1(size_t m, size_t n, size_t n_loops,
                              unsigned int **fill_indices, const NUM *uniforms,
-                             const NUM *normals, const NUM *r_t, NUM **gammas) {
+                             const NUM *normals, const NUM *r_t,
+                             const NUM *beta, NUM **gammas) {
   extern __shared__ unsigned int counter[];
   size_t base_i =
       blockIdx.x * blockDim.x; // note that we did not include the thread
@@ -619,7 +620,7 @@ __global__ void make_gamma_1(size_t m, size_t n, size_t n_loops,
   size_t j = blockIdx.y * blockDim.y + threadIdx.y; // m
 
   if (j < m) {
-    NUM alpha_ = 0.5 * r_t[j];
+    NUM alpha_ = 0.5 * beta[j] * r_t[j];
     NUM beta_ = 1.0;
 
     NUM d = alpha_ - 1.0 / 3.0;
@@ -701,7 +702,7 @@ __global__ void make_beta(size_t m, size_t n, size_t n_loops,
 
   if (j < m) {
     // parameters of the Gamma distribution
-    NUM alpha_ = 0.5 * r_t[j] * (1.0 / beta[j] - 1.0);
+    NUM alpha_ = 0.5 * (1.0 - beta[j]) * r_t[j];
     NUM beta_ = 1.0;
 
     NUM d = alpha_ - 1.0 / 3.0;

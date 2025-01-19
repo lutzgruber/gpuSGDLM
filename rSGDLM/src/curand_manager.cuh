@@ -162,7 +162,8 @@ inline void sampleBeta(curandGenerator_t gen, size_t m, size_t n,
   unsigned int **fill_indices = NULL;
   make_gamma_1<<<numBlocks, threadsPerBlock,
                  m * numBlocks.x * sizeof(unsigned int), stream>>>(
-      m, n, n_loops, fill_indices, memory_uniforms, memory_normals, r_t, betas);
+      m, n, n_loops, fill_indices, memory_uniforms, memory_normals, r_t, beta,
+      betas);
   cudaErrchk(cudaGetLastError());
 
   // create Beta(alpha, beta) by using the previously created Gamma(alpha, 1.0)
