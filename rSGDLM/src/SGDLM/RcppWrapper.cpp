@@ -440,7 +440,6 @@ SGDLM::RcppWrapper<DOUBLE>::computeForecast(std::size_t nsim,
 
   for (std::size_t k = 0; k < nsteps_arg_3; k++) {
     if (k > 0) {
-      wrapper->computePrior(true);
       wrapper->evolveForecastSamples();
     }
 
@@ -555,7 +554,6 @@ Rcpp::NumericVector SGDLM::RcppWrapper<DOUBLE>::computeEvoForecast(
                            (nsteps_arg_1 > 1) * k * wrapper->getNoSeries() *
                                wrapper->getMaxP() * wrapper->getMaxP() *
                                sizeof(DOUBLE));
-      wrapper->computePrior(data_G_tp1_pointer_pos, true);
       wrapper->evolveForecastSamples(data_G_tp1_pointer_pos);
     }
 
