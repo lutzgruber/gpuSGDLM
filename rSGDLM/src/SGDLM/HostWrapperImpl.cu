@@ -469,9 +469,10 @@ void SGDLM::HostWrapperImpl<DOUBLE>::initSimMemory(std::size_t nsim,
     P.data_y = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
     P.data_nus = MEM_sim.device_alloc_vec<DOUBLE>(this->m * P.nsim);
     P.data_Gammas_inv =
-        (DOUBLE *)((char *)P.data_Gammas + (this->m * this->m * nsim_batch) *
-                                               sizeof(DOUBLE)); // MEM_sim.device_alloc<DOUBLE>(3,
-                                                                // dim_Gammas);
+        (DOUBLE *)((char *)P.data_Gammas +
+                   (this->m * this->m * nsim_batch) *
+                       sizeof(DOUBLE)); // MEM_sim.device_alloc<DOUBLE>(3,
+                                        // dim_Gammas);
 
     // define array pointers
     P.etas = NULL;

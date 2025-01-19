@@ -30,10 +30,10 @@ public:
       std::size_t m,
       std::size_t
           max_p); //, const DOUBLE* host_data_m_t, const DOUBLE* host_data_C_t,
-                  //const DOUBLE* host_data_n_t, const DOUBLE* host_data_s_t,
-                  //const DOUBLE* host_data_beta, const DOUBLE* host_data_delta,
-                  //const unsigned int* host_data_p, const unsigned int*
-                  //host_data_sp_indices);
+                  // const DOUBLE* host_data_n_t, const DOUBLE* host_data_s_t,
+                  // const DOUBLE* host_data_beta, const DOUBLE*
+                  // host_data_delta, const unsigned int* host_data_p, const
+                  // unsigned int* host_data_sp_indices);
 
   void clearMemory();
 
