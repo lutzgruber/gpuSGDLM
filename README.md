@@ -166,7 +166,7 @@ The `computeForecast` method creates multi step ahead forecasts, if the input ar
 multi_step_forecasts = sgdlm1$computeForecast(
   nsim = 10000,
   nsim_batch = 10000,
-  F_tp1 = array(F_tp1, c(dim(F_tp1), 5))
+  F_tp1 = array(F_tp1, c(dim(F_tp1), 50))
 )
 mean_forecasts = t(apply(multi_step_forecasts, c(1, 3), mean))
 upper_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .95, na.rm = TRUE))
