@@ -45,34 +45,57 @@ M = Module("gpuSGDLM", "rSGDLM")
 no_gpus=1
 sgdlm1 = new(M$SGDLM, no_gpus)
 
+# define m = number of series
+m = 6
+
+# define simultaneous parental structure
+count_parents = c(2, 1, 3, 0, 1, 2)
+list_simultaneous_parents = list(
+  c(3),
+  c(1, 3, 4),
+  c(),
+  c(1, 2),
+  c(2, 3, 6),
+  c(1, 4)
+)
+
+# input validation
+stopifnot(length(count_parents) == m, length(list_simultaneous_parents) == m, min(unlist(list_simultaneous_parents)) >= 1, max(unlist(list_simultaneous_parents)) <= m)
+
 # set simultaneous parental structure
-p = c(3,4,3,2)
-sp = matrix(c(NA, NA, 8, NA, NA, 1, 9, 13, NA, NA, NA, NA, 3, 7, NA, NA), max(p))
+count_simultaneous_parents = sapply(list_simultaneous_parents, length)
+p = count_parents + count_simultaneous_parents
+sp = matrix(NA, nrow = max(p), ncol = m)
+
+helper_pos_Gamma = matrix(0:(m * m - 1), nrow = m, ncol = m)
+for (j in 1:m) {
+  if (length(list_simultaneous_parents[[j]]) >= 1) {
+    sp[count_parents[j] + (1:length(list_simultaneous_parents[[j]])), j] = helper_pos_Gamma[j, list_simultaneous_parents[[j]]]
+  }
+}
+
 sgdlm1$setSimultaneousParents(p, sp)
 
-# define m = number of series
-m = 4
-
 # set discount factors
-beta = rep(.95,m)
-delta = rep(.975,m)
+beta = rep(.95, m)
+delta = rep(.975, m)
 sgdlm1$setDiscountFactors(beta, delta)
 
 # set initial parameters
 a = array(0, c(max(p), m))
-R = array(0.05*diag(max(p)), c(max(p), max(p), m))
+R = array(0.05 * diag(max(p)), c(max(p), max(p), m))
 r = rep(1, m)
 c = rep(.01, m)
 sgdlm1$setPriorParameters(a, R, r, c)
 
 # generate mock time series data
 T=500
-true_means=c(rep(0,T/5), rep(.1,T/5), rep(.2,T/5), rep(.15,T/5), rep(.05,T/5))
-y=matrix(rnorm(m*T,true_means,.025),T)
+true_means=c(rep(0, T/5), rep(.1, T/5), rep(.2, T/5), rep(.15, T/5), rep(.05, T/5))
+y=matrix(rnorm(m*T, true_means, .025), T)
 
-mean_forecasts = array(0, c(T,m))
-upper_bound_forecasts = array(0, c(T,m))
-lower_bound_forecasts = array(0, c(T,m))
+mean_forecasts = array(0, c(T, m))
+upper_bound_forecasts = array(0, c(T, m))
+lower_bound_forecasts = array(0, c(T, m))
 
 # filter data
 for(t in 2:T) {
@@ -83,12 +106,18 @@ for(t in 2:T) {
   
   # time t predictors including values of simultaneous parental series
   F_t=array(0, c(max(p), m))
-  F_t[1,1:3] = 1 # local intercept for series j=1,2,3
-  F_t[2,c(1,3)] = y[t-1,c(1,3)] # AR1-term for series j=1,3
-  F_t[3,3] = true_means[t] # true mean predictor for series j=3 (unrealistic in practice!)
-  F_t[3,1] = y_t[3] # simultaneous parents for series j=1
-  F_t[2:4,2] = y_t[c(1,3,4)] # simultaneous parents for series j=2
-  F_t[1:2,4] = y_t[c(1,2)] # simultaneous parents for series j=4
+  # first, set the "external" predictors (real parents)
+  F_t[1:2, 1] = c(1, y[t-1, 1]) # series j=1 gets an intercept and AR1 term
+  F_t[1, 2] = 1 # series j=2 gets an intercept
+  F_t[1:3, 3] = c(1, y[t-1, 3], true_means[t]) # series j=3 gets an intercept, AR1 term, and oracle predictor
+  F_t[1, 5] = 1 # series j=5 gets an intercept
+  F_t[1:2, 6] = c(1, y[t-1, 1]) # series j=6 gets an intercept an a cross-series AR1 term
+  # second, set the simultaneous parents
+  for (j in 1:m) {
+    if (length(list_simultaneous_parents[[j]]) >= 1) {
+      F_t[count_parents[j] + (1:length(list_simultaneous_parents[[j]])), j] = y_t[list_simultaneous_parents[[j]]]
+    }
+  }
   
   # compute naive posteriors
   sgdlm1$computePosterior(y_t, F_t)
@@ -107,9 +136,11 @@ for(t in 2:T) {
   if (t < T) {
     # external time t+1 predictors 
     F_tp1=array(0, c(max(p), m))
-    F_tp1[1,1:3] = 1 # local intercept for series j=1,2,3
-    F_tp1[2,c(1,3)] = y[t,c(1,3)] # AR1-term for series j=1,3
-    F_tp1[3,3] = true_means[t+1] # true mean predictor for series j=3 (we are unlikely to know true means in the real world!)
+    F_tp1[1:2, 1] = c(1, y[t, 1]) # series j=1 gets an intercept and AR1 term
+    F_tp1[1, 2] = 1 # series j=2 gets an intercept
+    F_tp1[1:3, 3] = c(1, y[t, 3], true_means[t+1]) # series j=3 gets an intercept, AR1 term, and oracle predictor
+    F_tp1[1, 5] = 1 # series j=5 gets an intercept
+    F_tp1[1:2, 6] = c(1, y[t, 1]) # series j=6 gets an intercept an a cross-series AR1 term
   
     # compute forecasts 
     y.forecasts = sgdlm1$computeForecast(10000, 10000, F_tp1)
@@ -121,7 +152,7 @@ for(t in 2:T) {
 }
 
 # plot true data and forecasts
-par(mfrow = c(2, 2))
+par(mfrow = c(2, 3))
 plot(y[,1], type = 'l')
 lines(mean_forecasts[,1], col = 'red')
 lines(upper_bound_forecasts[,1], col = 'red', lty = 'dashed')
@@ -138,6 +169,14 @@ plot(y[,4], type = 'l')
 lines(mean_forecasts[,4], col = 'red')
 lines(upper_bound_forecasts[,4], col = 'red', lty = 'dashed')
 lines(lower_bound_forecasts[,4], col = 'red', lty = 'dashed')
+plot(y[,5], type = 'l')
+lines(mean_forecasts[,5], col = 'red')
+lines(upper_bound_forecasts[,5], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,5], col = 'red', lty = 'dashed')
+plot(y[,6], type = 'l')
+lines(mean_forecasts[,6], col = 'red')
+lines(upper_bound_forecasts[,6], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,6], col = 'red', lty = 'dashed')
 ```
 ![Forecast and observed data](README-plot1.jpg)
 
@@ -172,7 +211,7 @@ mean_forecasts = t(apply(multi_step_forecasts, c(1, 3), mean))
 upper_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .95, na.rm = TRUE))
 lower_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .05, na.rm = TRUE))
 
-par(mfrow = c(2, 2))
+par(mfrow = c(2, 3))
 plot(mean_forecasts[,1], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
 lines(upper_bound_forecasts[,1], col = 'red', lty = 'dashed')
 lines(lower_bound_forecasts[,1], col = 'red', lty = 'dashed')
@@ -185,5 +224,15 @@ lines(lower_bound_forecasts[,3], col = 'red', lty = 'dashed')
 plot(mean_forecasts[,4], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
 lines(upper_bound_forecasts[,4], col = 'red', lty = 'dashed')
 lines(lower_bound_forecasts[,4], col = 'red', lty = 'dashed')
+plot(mean_forecasts[,5], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,5], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,5], col = 'red', lty = 'dashed')
+plot(mean_forecasts[,6], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_forecasts[,6], col = 'red', lty = 'dashed')
+lines(lower_bound_forecasts[,6], col = 'red', lty = 'dashed')
 ```
 ![Forecast and observed data](README-plot2.jpg)
+
+### Exporting lambdas and thetas
+
+The functions `computeForecastDebug` and `computeEvoForecastDebug` return a list of forecasts, lambdas and thetas.
