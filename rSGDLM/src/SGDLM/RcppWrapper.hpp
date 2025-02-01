@@ -68,10 +68,17 @@ public:
   Rcpp::NumericVector computeForecast(std::size_t nsim, std::size_t nsim_batch,
                                       const Rcpp::NumericVector &F_tp1);
 
+  Rcpp::List computeForecastDebug(std::size_t nsim, std::size_t nsim_batch,
+                                  const Rcpp::NumericVector &F_tp1);
+
   Rcpp::NumericVector computeEvoForecast(std::size_t nsim,
                                          std::size_t nsim_batch,
                                          const Rcpp::NumericVector &F_tp1,
                                          const Rcpp::NumericVector &G_tp1);
+
+  Rcpp::List computeEvoForecastDebug(std::size_t nsim, std::size_t nsim_batch,
+                                     const Rcpp::NumericVector &F_tp1,
+                                     const Rcpp::NumericVector &G_tp1);
 
   std::size_t getLogLevel() const;
 

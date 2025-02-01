@@ -924,6 +924,7 @@ void SGDLM::HostWrapperImpl<DOUBLE>::evolveForecastSamples(
 template <typename DOUBLE>
 void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(
     DOUBLE *host_data_ytp1, const DOUBLE *host_data_x_tp1,
+    DOUBLE *host_data_lambdas, DOUBLE *host_data_thetas,
     bool use_existing_lambdas_and_thetas) {
   SYSDEBUG_LOGGER << "HostWrapperImpl::computeForecast()" << ENDL;
   myAssert(this->checkInitialized());
@@ -972,6 +973,20 @@ void SGDLM::HostWrapperImpl<DOUBLE>::computeForecast(
                    gpu_index * this->m * P.nsim * sizeof(DOUBLE));
     memory_manager_GPU::cpyToHost<DOUBLE>(P.data_y, out_ptr_pos,
                                           this->m * P.nsim, P.stream);
+
+    if (host_data_lambdas != NULL) {
+      out_ptr_pos = (DOUBLE *)((char *)host_data_lambdas +
+                               gpu_index * this->m * P.nsim * sizeof(DOUBLE));
+      memory_manager_GPU::cpyToHost<DOUBLE>(P.data_lambdas, out_ptr_pos,
+                                            this->m * P.nsim, P.stream);
+    }
+    if (host_data_thetas != NULL) {
+      out_ptr_pos = (DOUBLE *)((char *)host_data_thetas +
+                               gpu_index * this->m * this->max_p * P.nsim *
+                                   sizeof(DOUBLE));
+      memory_manager_GPU::cpyToHost<DOUBLE>(
+          P.data_thetas, out_ptr_pos, this->m * this->max_p * P.nsim, P.stream);
+    }
   }
 
   // wait until computations and memory transfers are complete

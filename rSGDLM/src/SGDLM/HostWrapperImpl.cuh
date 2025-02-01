@@ -85,6 +85,7 @@ public:
   void evolveForecastSamples(const DOUBLE *host_data_G_tp1);
 
   void computeForecast(DOUBLE *host_data_y_tp1, const DOUBLE *host_data_x_tp1,
+                       DOUBLE *host_data_lambdas, DOUBLE *host_data_thetas,
                        bool use_existing_lambdas_and_thetas);
 
   void computePosterior(const DOUBLE *host_data_y_t,
