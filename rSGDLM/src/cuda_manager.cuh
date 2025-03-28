@@ -13,12 +13,12 @@
 #include "loggerGPU.cuh"
 
 inline void startCuda(size_t device_id, bool force = false) {
-	int current_id = -1;
-	cudaErrchk(cudaGetDevice(&current_id));
+  int current_id = -1;
+  cudaErrchk(cudaGetDevice(&current_id));
 
-	if (current_id != device_id || force) {
-		cudaErrchk(cudaSetDevice(device_id));
-	}
+  if (current_id != device_id || force) {
+    cudaErrchk(cudaSetDevice(device_id));
+  }
 }
 
 #endif /* CUDA_MANAGER_CUH_ */
