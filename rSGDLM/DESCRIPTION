@@ -1,7 +1,7 @@
 Package: rSGDLM
 Type: Package
 Title: Simultaneous Graphical Dynamic Linear Models
-Version: 1.1.0
+Version: 1.2.0
 Date: 2025-01-04
 Author: Lutz Gruber
 Maintainer: Lutz Gruber <no@email>
