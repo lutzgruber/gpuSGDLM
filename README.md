@@ -48,15 +48,15 @@ sgdlm1 = new(M$SGDLM, no_gpus)
 # define m = number of series
 m = 6
 
-# define simultaneous parental structure
-count_parents = c(2, 1, 3, 0, 1, 2)
+# define simultaneous parental structure; series 3 and 5 are disconnected nodes in the parental graph to better illustrate the effect of different discount settings
+count_parents = c(2, 0, 1, 3, 1, 2)
 list_simultaneous_parents = list(
-  c(3),
-  c(1, 3, 4),
+  c(6),
+  c(1, 6, 4),
   c(),
   c(1, 2),
-  c(2, 3, 6),
-  c(1, 4)
+  c(),
+  c(2, 4)
 )
 
 # input validation
@@ -78,8 +78,10 @@ sgdlm1$setSimultaneousParents(p, sp)
 
 # set discount factors
 beta = rep(.95, m)
-delta = rep(.975, m)
-sgdlm1$setDiscountFactors(beta, delta)
+Delta = array(.95, c(max(p), max(p), m))
+Delta[,,3] = .7 # special discounting setting for illustration
+Delta[,,5] = .9999 # special discounting setting for illustration
+sgdlm1$setDiscountFactors(beta, Delta)
 
 # set initial parameters
 a = array(0, c(max(p), m))
@@ -108,8 +110,8 @@ for(t in 2:T) {
   F_t=array(0, c(max(p), m))
   # first, set the "external" predictors (real parents)
   F_t[1:2, 1] = c(1, y[t-1, 1]) # series j=1 gets an intercept and AR1 term
-  F_t[1, 2] = 1 # series j=2 gets an intercept
-  F_t[1:3, 3] = c(1, y[t-1, 3], true_means[t]) # series j=3 gets an intercept, AR1 term, and oracle predictor
+  F_t[1, 3] = 1 # series j=3 gets an intercept
+  F_t[1:3, 4] = c(1, y[t-1, 4], true_means[t]) # series j=4 gets an intercept, AR1 term, and oracle predictor
   F_t[1, 5] = 1 # series j=5 gets an intercept
   F_t[1:2, 6] = c(1, y[t-1, 1]) # series j=6 gets an intercept an a cross-series AR1 term
   # second, set the simultaneous parents
@@ -137,8 +139,8 @@ for(t in 2:T) {
     # external time t+1 predictors 
     F_tp1=array(0, c(max(p), m))
     F_tp1[1:2, 1] = c(1, y[t, 1]) # series j=1 gets an intercept and AR1 term
-    F_tp1[1, 2] = 1 # series j=2 gets an intercept
-    F_tp1[1:3, 3] = c(1, y[t, 3], true_means[t+1]) # series j=3 gets an intercept, AR1 term, and oracle predictor
+    F_tp1[1, 3] = 1 # series j=3 gets an intercept
+    F_tp1[1:3, 4] = c(1, y[t, 4], true_means[t+1]) # series j=4 gets an intercept, AR1 term, and oracle predictor
     F_tp1[1, 5] = 1 # series j=5 gets an intercept
     F_tp1[1:2, 6] = c(1, y[t, 1]) # series j=6 gets an intercept an a cross-series AR1 term
   
@@ -207,29 +209,29 @@ multi_step_forecasts = sgdlm1$computeForecast(
   nsim_batch = 10000,
   F_tp1 = array(F_tp1, c(dim(F_tp1), 50))
 )
-mean_forecasts = t(apply(multi_step_forecasts, c(1, 3), mean))
-upper_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .95, na.rm = TRUE))
-lower_bound_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .05, na.rm = TRUE))
+mean_multi_forecasts = t(apply(multi_step_forecasts, c(1, 3), mean))
+upper_bound_multi_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .95, na.rm = TRUE))
+lower_bound_multi_forecasts = t(apply(multi_step_forecasts, c(1, 3), quantile, .05, na.rm = TRUE))
 
 par(mfrow = c(2, 3))
-plot(mean_forecasts[,1], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,1], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,1], col = 'red', lty = 'dashed')
-plot(mean_forecasts[,2], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,2], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,2], col = 'red', lty = 'dashed')
-plot(mean_forecasts[,3], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,3], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,3], col = 'red', lty = 'dashed')
-plot(mean_forecasts[,4], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,4], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,4], col = 'red', lty = 'dashed')
-plot(mean_forecasts[,5], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,5], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,5], col = 'red', lty = 'dashed')
-plot(mean_forecasts[,6], ylim = c(min(lower_bound_forecasts, na.rm = TRUE), max(upper_bound_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
-lines(upper_bound_forecasts[,6], col = 'red', lty = 'dashed')
-lines(lower_bound_forecasts[,6], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,1], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,1], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,1], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,2], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,2], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,2], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,3], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,3], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,3], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,4], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,4], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,4], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,5], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,5], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,5], col = 'red', lty = 'dashed')
+plot(mean_multi_forecasts[,6], ylim = c(.9 * min(lower_bound_multi_forecasts, na.rm = TRUE), 1.1 * max(upper_bound_multi_forecasts, na.rm = TRUE)), type = 'l', col = 'red')
+lines(upper_bound_multi_forecasts[,6], col = 'red', lty = 'dashed')
+lines(lower_bound_multi_forecasts[,6], col = 'red', lty = 'dashed')
 ```
 ![Forecast and observed data](README-plot2.jpg)
 

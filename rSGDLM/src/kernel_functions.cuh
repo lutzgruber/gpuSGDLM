@@ -256,6 +256,38 @@ batchedMatrixScale(size_t batchCount, size_t nrows,
 }
 
 template <typename NUM>
+__global__ void batchedMatrixScaleWithDiff(
+    size_t batchCount, size_t nrows, const unsigned int *change_cols,
+    const unsigned int *change_rows, NUM **V, NUM **diff_V, const NUM **c,
+    SCALE_TRANSFORMATION T = SCALE_TRANSFORMATION_NONE) {
+  size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t j = blockIdx.y * blockDim.y + threadIdx.y;
+
+  size_t row = j % nrows;
+  size_t col = j / nrows;
+
+  if (i < batchCount && row < change_rows[i] && col < change_cols[i]) {
+    switch (T) {
+    case SCALE_TRANSFORMATION_SQRT:
+      diff_V[i][j] = V[i][j] * (sqrt(c[i][j]) - 1.0);
+      V[i][j] *= sqrt(c[i][j]);
+      break;
+    case SCALE_TRANSFORMATION_LOG:
+      diff_V[i][j] = V[i][j] * (log(c[i][j]) - 1.0);
+      V[i][j] *= log(c[i][j]);
+      break;
+    case SCALE_TRANSFORMATION_INV:
+      diff_V[i][j] = V[i][j] * (1 / c[i][j] - 1.0);
+      V[i][j] /= c[i][j];
+      break;
+    default:
+      diff_V[i][j] = V[i][j] * (c[i][j] - 1.0);
+      V[i][j] *= c[i][j];
+    }
+  }
+}
+
+template <typename NUM>
 __global__ void
 batchedMatrixDiagScale(size_t batchCount, size_t nrows,
                        const unsigned int *change_cols,
@@ -953,7 +985,7 @@ __global__ void compute_VB_vector1(size_t batchSize, size_t m, size_t max_p,
 template <typename NUM>
 __global__ void scale_omegas(size_t batchSize, size_t m, size_t max_p,
                              const unsigned int *p, const NUM **lambdas,
-                             const NUM *delta, const NUM *c_t, NUM **omegas) {
+                             const NUM *c_t, NUM **omegas) {
   size_t i = blockIdx.z * blockDim.z + threadIdx.z; // batchSize * m
   size_t k = blockIdx.x * blockDim.x + threadIdx.x; // max_p
 
@@ -961,7 +993,7 @@ __global__ void scale_omegas(size_t batchSize, size_t m, size_t max_p,
 
   if (i < m * batchSize && k < max_p) {
     if (k < p[j]) {
-      omegas[i][k] *= sqrt((1 - delta[j]) / (c_t[j] * lambdas[i][0]));
+      omegas[i][k] /= sqrt(c_t[j] * lambdas[i][0]);
     } else {
       omegas[i][k] = 0;
     }

@@ -157,7 +157,11 @@ void SGDLM::HostWrapperImpl<DOUBLE>::initMemory(std::size_t m,
 
     // allocate device memory for discount factors (MEM)
     P.beta = MEM.device_alloc_vec<DOUBLE>(this->m);
-    P.delta = MEM.device_alloc_vec<DOUBLE>(this->m);
+    P.data_delta =
+        MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p * this->max_p);
+    MEM.cpyToDeviceAsPtrArray<DOUBLE>(
+        (const DOUBLE *)P.data_delta, this->m, this->max_p * this->max_p,
+        P.delta); // generate CPU+GPU pointer to individual matrices
 
     // allocate device memory for simultaneous parental sets (MEM)
     P.p = MEM.device_alloc_vec<unsigned int>(this->m);
@@ -188,6 +192,11 @@ void SGDLM::HostWrapperImpl<DOUBLE>::initMemory(std::size_t m,
     MEM.cpyToDeviceAsPtrArray<DOUBLE>(
         (const DOUBLE *)P.data_C_t, this->m, this->max_p * this->max_p,
         P.C_t); // generate CPU+GPU pointer to individual matrices
+    P.data_W_t =
+        MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p * this->max_p);
+    MEM.cpyToDeviceAsPtrArray<DOUBLE>(
+        (const DOUBLE *)P.data_W_t, this->m, this->max_p * this->max_p,
+        P.W_t); // generate CPU+GPU pointer to individual matrices
     P.n_t = MEM.device_alloc_vec<DOUBLE>(this->m);
     P.s_t = MEM.device_alloc_vec<DOUBLE>(this->m);
 
@@ -203,6 +212,12 @@ void SGDLM::HostWrapperImpl<DOUBLE>::initMemory(std::size_t m,
         (const DOUBLE *)P.forecasting_data_C_t, this->m,
         this->max_p * this->max_p,
         P.forecasting_C_t); // generate CPU+GPU pointer to individual matrices
+    P.forecasting_data_W_t =
+        MEM.device_alloc_vec<DOUBLE>(this->m * this->max_p * this->max_p);
+    MEM.cpyToDeviceAsPtrArray<DOUBLE>(
+        (const DOUBLE *)P.forecasting_data_W_t, this->m,
+        this->max_p * this->max_p,
+        P.forecasting_W_t); // generate CPU+GPU pointer to individual matrices
     P.forecasting_n_t = MEM.device_alloc_vec<DOUBLE>(this->m);
     P.forecasting_s_t = MEM.device_alloc_vec<DOUBLE>(this->m);
   }
@@ -555,6 +570,13 @@ void SGDLM::HostWrapperImpl<DOUBLE>::initForecastPriors() {
         (this->m * this->max_p * this->max_p), (const DOUBLE *)P.data_C_t,
         P.forecasting_data_C_t);
     cudaErrchk(cudaGetLastError());
+
+    copy<<<((this->m * this->max_p * this->max_p) + THREADS_PER_BLOCK - 1) /
+               THREADS_PER_BLOCK,
+           THREADS_PER_BLOCK, 0, P.stream>>>(
+        (this->m * this->max_p * this->max_p), (const DOUBLE *)P.data_W_t,
+        P.forecasting_data_W_t);
+    cudaErrchk(cudaGetLastError());
   }
 
   // wait until computations and memory transfers are complete
@@ -661,7 +683,8 @@ void SGDLM::HostWrapperImpl<DOUBLE>::getDiscountFactors(
   }
 
   if (host_data_delta != NULL) {
-    memory_manager_GPU::cpyToHost<DOUBLE>(P.delta, host_data_delta, this->m,
+    memory_manager_GPU::cpyToHost<DOUBLE>(P.data_delta, host_data_delta,
+                                          this->m * this->max_p * this->max_p,
                                           P.stream);
   }
 
@@ -684,8 +707,9 @@ void SGDLM::HostWrapperImpl<DOUBLE>::setDiscountFactors(
     }
 
     if (host_data_delta != NULL) {
-      memory_manager_GPU::cpyToDevice<DOUBLE>(P.delta, host_data_delta, this->m,
-                                              P.stream);
+      memory_manager_GPU::cpyToDevice<DOUBLE>(
+          P.data_delta, host_data_delta, this->m * this->max_p * this->max_p,
+          P.stream);
     }
   }
 }
@@ -789,12 +813,12 @@ void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(
     if (evolve_forecast_variables) {
       SGDLM<DOUBLE>::compute_one_step_ahead_prior(
           this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t,
-          P.forecasting_n_t, P.forecasting_s_t, P.beta, (const DOUBLE *)P.delta,
-          P.stream);
+          P.forecasting_n_t, P.forecasting_s_t, P.forecasting_W_t, P.beta,
+          (const DOUBLE **)P.delta, P.stream);
     } else {
       SGDLM<DOUBLE>::compute_one_step_ahead_prior(
-          this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-          (const DOUBLE *)P.delta, P.stream);
+          this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.W_t, P.beta,
+          (const DOUBLE **)P.delta, P.stream);
     }
   }
 
@@ -830,13 +854,13 @@ void SGDLM::HostWrapperImpl<DOUBLE>::computePrior(
     if (evolve_forecast_variables) {
       SGDLM<DOUBLE>::compute_one_step_ahead_prior(
           this->m, this->max_p, P.p, P.forecasting_m_t, P.forecasting_C_t,
-          P.forecasting_n_t, P.forecasting_s_t, P.beta, (const DOUBLE *)P.delta,
-          P.stream, P.CUBLAS, P.zero, P.plus_one, (const DOUBLE **)P.G_t,
-          P.C_t_buffer, P.m_t_buffer);
+          P.forecasting_n_t, P.forecasting_s_t, P.forecasting_W_t, P.beta,
+          (const DOUBLE **)P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one,
+          (const DOUBLE **)P.G_t, P.C_t_buffer, P.m_t_buffer);
     } else {
       SGDLM<DOUBLE>::compute_one_step_ahead_prior(
-          this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.beta,
-          (const DOUBLE *)P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one,
+          this->m, this->max_p, P.p, P.m_t, P.C_t, P.n_t, P.s_t, P.W_t, P.beta,
+          (const DOUBLE **)P.delta, P.stream, P.CUBLAS, P.zero, P.plus_one,
           (const DOUBLE **)P.G_t, P.C_t_buffer, P.m_t_buffer);
     }
   }
@@ -867,13 +891,13 @@ void SGDLM::HostWrapperImpl<DOUBLE>::evolveForecastSamples() {
     SGDLM<DOUBLE>::evolve_lambdas_and_thetas(
         (const DOUBLE *)P.zero, (const DOUBLE *)P.plus_one, this->m,
         this->max_p, (const unsigned int *)P.p,
-        (const DOUBLE **)P.forecasting_C_t, (const DOUBLE *)P.forecasting_n_t,
+        (const DOUBLE **)P.forecasting_W_t, (const DOUBLE *)P.forecasting_n_t,
         (const DOUBLE *)P.forecasting_s_t, (const DOUBLE *)P.beta,
-        (const DOUBLE *)P.delta, (const DOUBLE **)NULL, P.nsim, P.lambdas,
-        P.etas, P.cache_gamma_uniforms, P.cache_gamma_normals,
-        P.cache_MVN_normals, P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t,
-        P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr,
-        P.thetas_buffer_nrepeat_ptr, P.stream, P.CUBLAS, P.CURAND);
+        (const DOUBLE **)NULL, P.nsim, P.lambdas, P.etas,
+        P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
+        P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t, P.chol_C_t_nrepeat_ptr,
+        P.thetas, P.thetas_nrepeat_ptr, P.thetas_buffer_nrepeat_ptr, P.stream,
+        P.CUBLAS, P.CURAND);
   }
 }
 
@@ -911,13 +935,13 @@ void SGDLM::HostWrapperImpl<DOUBLE>::evolveForecastSamples(
     SGDLM<DOUBLE>::evolve_lambdas_and_thetas(
         (const DOUBLE *)P.zero, (const DOUBLE *)P.plus_one, this->m,
         this->max_p, (const unsigned int *)P.p,
-        (const DOUBLE **)P.forecasting_C_t, (const DOUBLE *)P.forecasting_n_t,
+        (const DOUBLE **)P.forecasting_W_t, (const DOUBLE *)P.forecasting_n_t,
         (const DOUBLE *)P.forecasting_s_t, (const DOUBLE *)P.beta,
-        (const DOUBLE *)P.delta, (const DOUBLE **)P.G_t_nrepeat_ptr, P.nsim,
-        P.lambdas, P.etas, P.cache_gamma_uniforms, P.cache_gamma_normals,
-        P.cache_MVN_normals, P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t,
-        P.chol_C_t_nrepeat_ptr, P.thetas, P.thetas_nrepeat_ptr,
-        P.thetas_buffer_nrepeat_ptr, P.stream, P.CUBLAS, P.CURAND);
+        (const DOUBLE **)P.G_t_nrepeat_ptr, P.nsim, P.lambdas, P.etas,
+        P.cache_gamma_uniforms, P.cache_gamma_normals, P.cache_MVN_normals,
+        P.cache_MVN_normals_nrepeat_ptr, P.chol_C_t, P.chol_C_t_nrepeat_ptr,
+        P.thetas, P.thetas_nrepeat_ptr, P.thetas_buffer_nrepeat_ptr, P.stream,
+        P.CUBLAS, P.CURAND);
   }
 }
 

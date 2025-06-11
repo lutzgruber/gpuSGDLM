@@ -26,10 +26,13 @@ template <typename DOUBLE, class memory_manager> struct simPointers {
   DOUBLE **C_t;
   DOUBLE *data_C_t_buffer;
   DOUBLE **C_t_buffer;
+  DOUBLE *data_W_t;
+  DOUBLE **W_t;
 
   DOUBLE *alpha;
   DOUBLE *beta;
-  DOUBLE *delta;
+  DOUBLE *data_delta;
+  DOUBLE **delta;
 
   DOUBLE *data_G_t;
   DOUBLE **G_t;
@@ -106,6 +109,8 @@ template <typename DOUBLE, class memory_manager> struct simPointers {
   DOUBLE **forecasting_m_t;
   DOUBLE *forecasting_data_C_t;
   DOUBLE **forecasting_C_t;
+  DOUBLE *forecasting_data_W_t;
+  DOUBLE **forecasting_W_t;
 
   // number of simulations
   size_t nsim;

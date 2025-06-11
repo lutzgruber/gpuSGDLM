@@ -125,18 +125,23 @@ Rcpp::List SGDLM::RcppWrapper<DOUBLE>::getDiscountFactors() const {
   DEBUG_LOGGER << "RcppWrapper::getDiscountFactors()" << ENDL;
 
   std::size_t m = wrapper->getNoSeries();
+  std::size_t max_p = wrapper->getMaxP();
+
+  std::size_t dim[] = {max_p, max_p, m};
+  std::size_t no_elements = dim[0] * dim[1] * dim[2];
 
   memory_manager_RCPP host_MEM_temp;
 
   DOUBLE *data_beta = host_MEM_temp.host_alloc_vec<DOUBLE>(m);
-  DOUBLE *data_delta = host_MEM_temp.host_alloc_vec<DOUBLE>(m);
+  DOUBLE *data_delta = host_MEM_temp.host_alloc_vec<DOUBLE>(no_elements);
 
   wrapper->getDiscountFactors(data_beta, data_delta);
 
   std::vector<DOUBLE> beta =
       memory_manager_RCPP::getSTDVector<DOUBLE>(data_beta, m);
-  std::vector<DOUBLE> delta =
-      memory_manager_RCPP::getSTDVector<DOUBLE>(data_delta, m);
+  Rcpp::NumericVector delta =
+      memory_manager_RCPP::getRcppVector<DOUBLE, Rcpp::NumericVector>(
+          data_delta, 3, dim);
 
   return Rcpp::List::create(Rcpp::Named("beta") = beta,
                             Rcpp::Named("delta") = delta);
@@ -144,15 +149,26 @@ Rcpp::List SGDLM::RcppWrapper<DOUBLE>::getDiscountFactors() const {
 
 template <typename DOUBLE>
 void SGDLM::RcppWrapper<DOUBLE>::setDiscountFactors(
-    const std::vector<DOUBLE> &beta, const std::vector<DOUBLE> &delta) {
+    const std::vector<DOUBLE> &beta, const Rcpp::NumericVector &delta) {
   DEBUG_LOGGER << "RcppWrapper::setDiscountFactors()" << ENDL;
 
+  Rcpp::Dimension dim_arg_2 = delta.attr("dim");
+
+  if (dim_arg_2.size() != 3) {
+    ERROR_LOGGER << "Incorrect dimension of delta" << ENDL;
+    return;
+  }
+
   std::size_t m = wrapper->getNoSeries();
+  std::size_t max_p = wrapper->getMaxP();
 
   std::size_t m_arg_1 = beta.size();
-  std::size_t m_arg_2 = delta.size();
+  std::size_t m_arg_2 = dim_arg_2[2];
+  std::size_t max_p_arg_2_0 = dim_arg_2[0];
+  std::size_t max_p_arg_2_1 = dim_arg_2[1];
 
-  if (m_arg_1 != m || m_arg_2 != m) {
+  if (m_arg_1 != m || m_arg_2 != m || max_p_arg_2_0 != max_p ||
+      max_p_arg_2_1 != max_p) {
     ERROR_LOGGER << "Dimensions of input arguments are incompatible" << ENDL;
     return;
   }
@@ -161,7 +177,7 @@ void SGDLM::RcppWrapper<DOUBLE>::setDiscountFactors(
 
   DOUBLE *data_beta = host_MEM_temp.getData<DOUBLE, std::vector<DOUBLE>>(beta);
   DOUBLE *data_delta =
-      host_MEM_temp.getData<DOUBLE, std::vector<DOUBLE>>(delta);
+      host_MEM_temp.getData<DOUBLE, Rcpp::NumericVector>(delta);
 
   wrapper->setDiscountFactors(data_beta, data_delta);
 }
